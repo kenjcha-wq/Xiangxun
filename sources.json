@@ -1,0 +1,21 @@
+[
+  { "name": "界面新闻",     "cat": "商业", "url": "https://a.jiemian.com/index.php?m=article&a=rss" },
+  { "name": "华尔街见闻",   "cat": "商业", "url": "https://dedicated.wallstreetcn.com/rss.xml" },
+  { "name": "钛媒体",       "cat": "商业", "url": "https://www.tmtpost.com/rss.xml" },
+  { "name": "雪球今日话题", "cat": "商业", "url": "https://xueqiu.com/hots/topic/rss" },
+  { "name": "经济观察网",   "cat": "财经", "url": "http://www.eeo.com.cn/rss.xml" },
+  { "name": "中新网",       "cat": "综合", "url": "https://www.chinanews.com.cn/rss/scroll-news.xml" },
+  { "name": "IT之家",       "cat": "科技", "url": "https://www.ithome.com/rss/" },
+  { "name": "爱范儿",       "cat": "科技", "url": "https://www.ifanr.com/feed" },
+  { "name": "极客公园",     "cat": "科技", "url": "https://www.geekpark.net/rss" },
+  { "name": "雷锋网",       "cat": "科技", "url": "https://www.leiphone.com/feed" },
+  { "name": "少数派",       "cat": "科技", "url": "https://sspai.com/feed" },
+  { "name": "数字尾巴",     "cat": "科技", "url": "https://www.dgtle.com/rss/dgtle.xml" },
+  { "name": "Solidot",      "cat": "科技", "url": "https://www.solidot.org/index.rss" },
+  { "name": "豆瓣热门影评", "cat": "电影", "url": "https://www.douban.com/feed/review/movie" },
+  { "name": "豆瓣书评",     "cat": "文化", "url": "https://www.douban.com/feed/review/book" },
+  { "name": "什么值得买",   "cat": "消费", "url": "https://post.smzdm.com/feed/" },
+  { "name": "机核",         "cat": "游戏", "url": "https://www.gcores.com/rss" },
+  { "name": "游研社",       "cat": "游戏", "url": "https://www.yystv.cn/rss/feed" }
+]
+

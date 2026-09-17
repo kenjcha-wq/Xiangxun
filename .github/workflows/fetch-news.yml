@@ -1,0 +1,43 @@
+name: 抓新闻（象讯）
+
+# 每 30 分钟抓一次 → 写 news.json → 自动提交，Pages 会自动重新部署
+# 手机上只读这一个文件，所以：不用中转、不用 key、不用 Mac 开机、打开就秒出
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:          # 也可以手动点一下立即跑
+
+permissions:
+  contents: write             # 允许把 news.json 提交回来（用 GitHub 内置令牌，不需要你的凭据）
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 抓取 + AI 摘要
+        env:
+          # 在仓库 Settings → Secrets and variables → Actions 里加一个 DEEPSEEK_API_KEY
+          # 不加也能跑，只是没有 AI 摘要
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          AI_MODEL: deepseek-chat
+          ENRICH_LIMIT: '60'
+        run: node fetch-news.mjs
+
+      - name: 提交 news.json
+        run: |
+          git config user.name  "xiangxun-bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add news.json
+          if git diff --cached --quiet; then
+            echo "内容没变化，不提交"
+          else
+            git commit -m "抓新闻 $(date -u +%Y-%m-%dT%H:%MZ)"
+            git push
+          fi
