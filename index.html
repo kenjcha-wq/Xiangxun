@@ -168,6 +168,21 @@
   }
   .reader-head h2{margin:0 0 8px;font-size:19px;line-height:1.5;font-weight:600;letter-spacing:.3px}
   .reader-head .meta{font-size:12px;color:var(--sub);display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  /* 阅读区头部吸顶：手机上滚到哪儿都有「返回列表」 */
+  .reader-head{position:sticky;top:0;z-index:6;background:var(--bg)}
+  .reader-actions{flex-wrap:wrap}
+  .starmark{cursor:pointer;user-select:none;padding:1px 7px;border-radius:99px;border:1px solid var(--line);color:var(--sub);font-size:11.5px}
+  .starmark.on{color:#c98a00;border-color:#e8c479;background:rgba(232,196,121,.14)}
+  .theme-row{display:flex;gap:10px;flex-wrap:wrap;margin:4px 0 26px}
+  .theme-chip{width:34px;height:34px;border-radius:10px;border:2px solid var(--line);cursor:pointer;position:relative}
+  .theme-chip.on{border-color:#3b82f6;box-shadow:0 0 0 2px rgba(59,130,246,.25)}
+  .theme-chip span{position:absolute;inset:auto 0 -16px 0;font-size:10px;color:var(--sub);text-align:center;white-space:nowrap}
+  @media (max-width:820px){
+    .reader-head{padding:10px 12px 4px}
+    .reader-actions{gap:8px}
+    .reader-actions .btn{flex:1;min-height:40px}
+    .note-box textarea{min-height:120px}
+  }
   .reader-body{padding:20px;overflow:auto;flex:1}
   .reader-body .summary-box{
     background:var(--panel);border-radius:var(--radius);
@@ -263,6 +278,9 @@
       <div class="source-item" data-filter="noted">
         <div class="name">Notebook</div><div class="badge" id="cntNoted">0</div>
       </div>
+      <div class="source-item" data-filter="starred">
+        <div class="name">⭐ 收藏</div><div class="badge" id="cntStarred">0</div>
+      </div>
 
       <div class="section-title">分类</div>
       <div id="catList"></div>
@@ -321,10 +339,15 @@
     <input type="text" id="setAiBase" placeholder="https://api.openai.com/v1/chat/completions">
     <label>模型名</label>
     <input type="text" id="setAiModel" placeholder="gpt-4o-mini">
+    <button class="btn" id="btnTestAi" style="margin-top:10px">测一下 AI</button>
+    <div class="hint" id="aiTestOut">填完点这里先试一句，通了再去看简报。</div>
 
     <label>自建代理前缀（无宿主时用于绕过 CORS）</label>
     <input type="text" id="setProxy" placeholder="https://your-proxy.com/?url=">
     <div class="hint">没有宿主时，新闻源大多被 CORS 拦截；填一个自己搭的代理前缀即可。</div>
+
+    <label>背景色</label>
+    <div class="theme-row" id="themeRow"></div>
 
     <label>缓存 TTL（分钟）</label>
     <input type="number" id="setTtl" min="1" value="30">
@@ -481,11 +504,13 @@ var STATE = {
   news: [],
   read: {},
   notes: {},          // { id: '笔记内容' }
+  stars: {},          // { id: true } 收藏
   ui: { sidebarCollapsed:false },
   settings: {
     aiKey: '', aiBase: '', aiModel: 'gpt-4o-mini',
     proxy: '', ttl: 30,
-    aiSummary: true, aiTags: true, aiDedupe: false
+    aiSummary: true, aiTags: true, aiDedupe: false,
+    theme: 'auto'          // auto=跟系统 / white / paper / mint / sky / rose / dark / black
   },
   filter: { type:'all', value:'' },
   search: '',
@@ -615,7 +640,8 @@ function txt(node, tag){
 }
 function stripHtml(s){
   if (!s) return '';
-  return String(s).replace(/<[^>]*>/g,' ').replace(/&nbsp;/g,' ').replace(/&amp;/g,'&')
+  // 第二个 replace 收尾：云端抓的 desc 是截断过的，会剩下半个标签（如 <img src="https://…）
+  return String(s).replace(/<[^>]*>/g,' ').replace(/<[a-zA-Z\/][^>]*$/,' ').replace(/&nbsp;/g,' ').replace(/&amp;/g,'&')
     .replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;/g,"'");
 }
 function cleanText(s){ return (s||'').replace(/\s+/g,' ').trim(); }
@@ -671,9 +697,10 @@ function fetchBaked(){
       window.__xbDigest = (d && d.digest) || window.__xbDigest || '';
       var items = (d && d.items) || [];
       if (!items.length) return [];
-      if (now() - (d.updated || 0) > 6 * 3600 * 1000) return [];   // 超过 6 小时当没用
+      // 云端数据就算凉了，也比"21 个源现场抓全失败"强：两天内照用（每条自带时间，旧了一眼能看出来）
+      if (now() - (d.updated || 0) > 48 * 3600 * 1000) return [];
       return items.map(function(x){
-        return { title:x.title, link:x.link, desc:x.desc || '', source:x.source || '', sourceId:'baked',
+        return { title:x.title, link:x.link, desc:cleanText(stripHtml(x.desc || '')).slice(0, 500), source:x.source || '', sourceId:'baked',
                  cat:x.cat || '综合', time:x.time || now(), summary:x.summary || '', tags:x.tags || [],
                  id: uid(normTitle(x.title) + '|' + domainOf(x.link)) };
       });
@@ -756,6 +783,33 @@ function aiAvailable(){
   if (HAS_HOST && XL.call) return true;
   return !!(STATE.settings.aiKey && STATE.settings.aiBase);
 }
+
+/* AI 地址/模型的两个大坑（都会 404）：
+   1) 地址只填到 /v1，少了 /chat/completions —— 这里自动补上；
+   2) 地址是 DeepSeek 却把模型留成 gpt-4o-mini —— 按地址换成对得上的名字。 */
+function normAiBase(u){
+  var s = (u || '').trim().replace(/\/+$/, '');
+  if (!s) return '';
+  // 只要中间已经有 /chat/completions 就一个字都不动
+  // （Azure 那种后面还挂 ?api-version=... 的写法也不会被改坏）
+  if (s.indexOf('/chat/completions') >= 0) return s;
+  return s + '/chat/completions';
+}
+function defaultModelFor(base){
+  var b = (base || '').toLowerCase();
+  if (b.indexOf('deepseek') >= 0) return 'deepseek-chat';
+  if (b.indexOf('moonshot') >= 0) return 'moonshot-v1-8k';
+  if (b.indexOf('dashscope') >= 0 || b.indexOf('aliyun') >= 0) return 'qwen-plus';
+  if (b.indexOf('zhipu') >= 0 || b.indexOf('bigmodel') >= 0) return 'glm-4-flash';
+  return 'gpt-4o-mini';
+}
+function aiModelNow(){
+  var m = (STATE.settings.aiModel || '').trim();
+  var base = STATE.settings.aiBase || '';
+  if (!m) return defaultModelFor(base);
+  if (m === 'gpt-4o-mini' && /deepseek|moonshot|dashscope|zhipu|bigmodel/i.test(base)) return defaultModelFor(base);
+  return m;
+}
 function aiChat(messages, jsonMode){
   if (HAS_HOST && XL.call) {
     return XL.call('ai.chat', { messages: messages, json: !!jsonMode })
@@ -771,14 +825,23 @@ function aiChat(messages, jsonMode){
 }
 function userAiChat(messages, jsonMode){
   if (!STATE.settings.aiKey || !STATE.settings.aiBase) return Promise.reject(new Error('AI 未配置'));
-  var body = { model: STATE.settings.aiModel || 'gpt-4o-mini', messages: messages, temperature: 0.3 };
+  var url = normAiBase(STATE.settings.aiBase);
+  var model = aiModelNow();
+  var body = { model: model, messages: messages, temperature: 0.3 };
   if (jsonMode) body.response_format = { type:'json_object' };
-  return fetch(STATE.settings.aiBase, {
+  return fetch(url, {
     method:'POST',
     headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer ' + STATE.settings.aiKey },
     body: JSON.stringify(body)
   }).then(function(r){
-    if (!r.ok) throw new Error('AI HTTP ' + r.status);
+    if (!r.ok) {
+      var why = '';
+      if (r.status === 404) why = '：地址或模型名不对';
+      else if (r.status === 401 || r.status === 403) why = '：key 不对或没权限';
+      else if (r.status === 429) why = '：调用太频繁或余额不足';
+      else if (r.status >= 500) why = '：对面服务出问题了';
+      throw new Error('AI HTTP ' + r.status + why + '（我请求的是 ' + url + '，模型 "' + model + '"）');
+    }
     return r.json();
   }).then(function(data){
     var text = data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
@@ -845,10 +908,17 @@ function aiDedupe(){
   }).catch(function(){});
 }
 
-function generateDigest(){
+function generateDigest(force){
   // 云端烤好的今日简报：手机上/网页里没有宿主也没有 key，用这个就不用现场调 AI 了
-  if (window.__xbDigest) return Promise.resolve(window.__xbDigest);
-  if (!aiAvailable()) return Promise.reject(new Error('AI 没接上'));
+  if (window.__xbDigest && !force) return Promise.resolve(window.__xbDigest);
+  if (!aiAvailable()) {
+    return Promise.reject(new Error(
+      '今天的简报还没烤出来。\n\n'
+      + '手机上用的是云端烤好的简报，云端配上 AI key（仓库里加 DEEPSEEK_API_KEY）之后每天自动生成；\n'
+      + '这台设备没接象览宿主，所以现场也生成不了。\n\n'
+      + '临时想看：用电脑上的象览打开，或者在设置里自己填 AI key，填完点「测一下 AI」，\n'
+      + '通了再回来看简报（填法：DeepSeek 地址 https://api.deepseek.com/v1/chat/completions，模型 deepseek-chat）。'));
+  }
   var today = STATE.news.slice(0, 40);
   if (!today.length) return Promise.reject(new Error('还没有新闻'));
   var lines = today.map(function(it, i){ return (i+1) + '. [' + (it.cat||'') + '] ' + it.title; }).join('\n');
@@ -912,6 +982,7 @@ function currentList(){
   var list = STATE.news.slice();
   if (STATE.filter.type === 'unread') list = list.filter(function(it){ return !STATE.read[it.id]; });
   else if (STATE.filter.type === 'noted') list = list.filter(function(it){ return !!(STATE.notes[it.id] && STATE.notes[it.id].trim()); });
+  else if (STATE.filter.type === 'starred') list = list.filter(function(it){ return !!STATE.stars[it.id]; });
   else if (STATE.filter.type === 'source') list = list.filter(function(it){ return it.sourceId === STATE.filter.value; });
   else if (STATE.filter.type === 'tag') list = list.filter(function(it){ return (it.tags||[]).indexOf(STATE.filter.value) >= 0; });
   else if (STATE.filter.type === 'cat') list = list.filter(function(it){ return (it.cats||[]).indexOf(STATE.filter.value) >= 0; });
@@ -936,6 +1007,7 @@ function renderNewsList(){
   $('cntAll').textContent = String(STATE.news.length);
   $('cntUnread').textContent = String(STATE.news.filter(function(it){ return !STATE.read[it.id]; }).length);
   $('cntNoted').textContent = String(STATE.news.filter(function(it){ return !!(STATE.notes[it.id] && STATE.notes[it.id].trim()); }).length);
+  if ($('cntStarred')) $('cntStarred').textContent = String(STATE.news.filter(function(it){ return !!STATE.stars[it.id]; }).length);
   if (!list.length) {
     box.appendChild(el('div', 'empty', STATE.news.length ? '没有匹配的新闻' : '点「刷新」抓取新闻'));
     return;
@@ -950,6 +1022,10 @@ function renderNewsList(){
     if (STATE.notes[it.id] && STATE.notes[it.id].trim()) {
       meta.appendChild(el('span', 'notemark', '记'));
     }
+    // 收藏：卡片上直接点（stopPropagation，不会误进阅读区）
+    var stm = el('span', 'starmark' + (STATE.stars[it.id] ? ' on' : ''), STATE.stars[it.id] ? '★ 已收藏' : '☆ 收藏');
+    stm.onclick = function(ev){ ev.stopPropagation(); STATE.stars[it.id] = !STATE.stars[it.id]; saveStars(); renderNewsList(); };
+    meta.appendChild(stm);
     item.appendChild(title); item.appendChild(meta);
     var tagRow = el('div', 'tags');
     (it.cats || []).forEach(function(c){ tagRow.appendChild(el('span', 'tag cat', c)); });
@@ -992,9 +1068,11 @@ function renderReader(it){
   btnOpen.onclick = function(){ openExternal(it.link); };
   var btnRead = el('button', 'btn', STATE.read[it.id] ? '标记未读' : '标记已读');
   btnRead.onclick = function(){ STATE.read[it.id] = !STATE.read[it.id]; saveRead(); renderNewsList(); openNews(it.id); };
-  var btnClose = el('button', 'btn hide-mobile', '返回列表');
+  var btnClose = el('button', 'btn', '← 返回');   // 手机上也要看得见（原来是 hide-mobile，进去就出不来）；短一点免得折行
   btnClose.onclick = function(){ $('colRead').classList.remove('mobile-show'); };
-  actions.appendChild(btnOpen); actions.appendChild(btnRead); actions.appendChild(btnClose);
+  var btnStar = el('button', 'btn', STATE.stars[it.id] ? '★ 取消收藏' : '☆ 收藏');
+  btnStar.onclick = function(){ STATE.stars[it.id] = !STATE.stars[it.id]; saveStars(); renderNewsList(); openNews(it.id); };
+  actions.appendChild(btnOpen); actions.appendChild(btnStar); actions.appendChild(btnRead); actions.appendChild(btnClose);
   head.appendChild(actions);
   reader.appendChild(head);
 
@@ -1038,10 +1116,12 @@ function renderReader(it){
     }
     body.appendChild(box);
   }
-  if (it.desc) {
+  var descTxt = cleanText(stripHtml(it.desc || ''));   // 双保险：旧缓存里可能带 HTML 标签
+  // 有些源（时光网、环球旅讯）的 desc 就是来源名本身，当摘要显示很傻，索性不显示
+  if (descTxt.length >= 10 && descTxt !== cleanText(it.source)) {
     var descBox = el('div', 'summary-box');
     descBox.appendChild(el('h4', '', '摘要'));
-    descBox.appendChild(el('div', '', it.desc));
+    descBox.appendChild(el('div', '', descTxt));
     body.appendChild(descBox);
   }
   if (it.link) {
@@ -1055,6 +1135,55 @@ function renderReader(it){
 
 function saveRead(){ return Store.set('read', STATE.read); }
 function saveNotes(){ return Store.set('notes', STATE.notes); }
+function saveStars(){ return Store.set('stars', STATE.stars); }
+
+/* ── 背景色：只换这几个 CSS 变量，切了就全身跟着变 ── */
+var THEMES = {
+  auto:  null,   // 跟系统（浅色/深色由系统决定）
+  white: {bg:'#ffffff', panel:'#ffffff', soft:'#f2f4f7', text:'#111827', sub:'#6b7280', line:'#e5e7eb'},
+  paper: {bg:'#f6f2e9', panel:'#fffdf7', soft:'#efe9dc', text:'#2b2418', sub:'#7a6f5c', line:'#e0d7c6'},
+  mint:  {bg:'#eef7f1', panel:'#ffffff', soft:'#e3f0e7', text:'#14312a', sub:'#4f7a6a', line:'#cfe4d8'},
+  sky:   {bg:'#eef4fb', panel:'#ffffff', soft:'#e2ecf8', text:'#12233a', sub:'#54708f', line:'#cfe0f2'},
+  rose:  {bg:'#fdf1f3', panel:'#ffffff', soft:'#f8e5e9', text:'#3a1520', sub:'#8f5a68', line:'#f0d3da'},
+  dark:  {bg:'#0f1115', panel:'#14171d', soft:'#1a1e26', text:'#e5e7eb', sub:'#9ca3af', line:'#242a35'},
+  black: {bg:'#000000', panel:'#0a0a0a', soft:'#141414', text:'#e8e8e8', sub:'#9a9a9a', line:'#222222'}
+};
+var THEME_NAMES = {auto:'跟系统', white:'白', paper:'米', mint:'薄荷', sky:'天蓝', rose:'粉', dark:'深灰', black:'纯黑'};
+function applyTheme(){
+  var name = (STATE.settings && STATE.settings.theme) || 'auto';
+  var t = THEMES[name];
+  var r = document.documentElement.style;
+  var keys = ['bg','panel','soft','text','sub','line'];
+  if (!t) { keys.forEach(function(k){ r.removeProperty('--' + (k === 'soft' ? 'panel-soft' : k)); }); return; }
+  r.setProperty('--bg', t.bg);
+  r.setProperty('--panel', t.panel);
+  r.setProperty('--panel-soft', t.soft);
+  r.setProperty('--text', t.text);
+  r.setProperty('--sub', t.sub);
+  r.setProperty('--line', t.line);
+}
+function renderThemeChips(){
+  var box = $('themeRow');
+  if (!box) return;
+  box.innerHTML = '';
+  Object.keys(THEMES).forEach(function(name){
+    var t = THEMES[name];
+    var c = el('div', 'theme-chip' + (((STATE.settings.theme || 'auto') === name) ? ' on' : ''));
+    c.style.background = t ? ('linear-gradient(135deg,' + t.bg + ' 60%,' + t.panel + ' 60%)') : 'linear-gradient(135deg,#fff 50%,#0f1115 50%)';
+    c.title = THEME_NAMES[name];
+    var lab = document.createElement('span');
+    lab.textContent = THEME_NAMES[name];
+    c.appendChild(lab);
+    c.onclick = function(){
+      STATE.settings.theme = name;
+      applyTheme();
+      renderThemeChips();
+      Store.set('settings', STATE.settings);   // 点一下就记住，不用再点「保存」
+      toast('背景：' + THEME_NAMES[name]);
+    };
+    box.appendChild(c);
+  });
+}
 
 function renderAll(){
   try { renderSources(); } catch(e){}
@@ -1066,9 +1195,9 @@ function renderAll(){
 
 function updateAiStatus(){
   var s = '';
-  if (HAS_HOST && XL.call) s = 'AI：宿主可用';
-  else if (aiAvailable()) s = 'AI：用户 Key';
-  else s = 'AI 没接上（新闻照常显示）';
+  if (HAS_HOST && XL.call) s = 'AI：走象览宿主（设置里这些不用填）';
+  else if (aiAvailable()) s = 'AI：你填的地址（' + aiModelNow() + '）';
+  else s = 'AI 没接上（新闻照常显示；简报要 AI，去设置里填）';
   $('aiStatus').textContent = s;
 }
 
@@ -1100,12 +1229,26 @@ function openSettings(){
   $('setAiModel').value = STATE.settings.aiModel || '';
   $('setProxy').value = STATE.settings.proxy || '';
   $('setTtl').value = STATE.settings.ttl || 30;
+  renderThemeChips();
   $('settingsMask').classList.add('show');
 }
-function saveSettings(){
+function applyAiInputs(){
+  // 把设置框里的值收进来，并且当场把两个必 404 的写法纠正掉，顺手写回框里让人看见
   STATE.settings.aiKey = $('setAiKey').value.trim();
-  STATE.settings.aiBase = $('setAiBase').value.trim();
-  STATE.settings.aiModel = $('setAiModel').value.trim() || 'gpt-4o-mini';
+  STATE.settings.aiBase = normAiBase($('setAiBase').value);
+  var raw = $('setAiModel').value.trim();
+  STATE.settings.aiModel = raw || defaultModelFor(STATE.settings.aiBase);
+  if (STATE.settings.aiModel === 'gpt-4o-mini'
+      && /deepseek|moonshot|dashscope|zhipu|bigmodel/i.test(STATE.settings.aiBase)) {
+    STATE.settings.aiModel = defaultModelFor(STATE.settings.aiBase);
+  }
+  $('setAiBase').value = STATE.settings.aiBase;
+  $('setAiModel').value = STATE.settings.aiModel;
+  Store.set('settings', STATE.settings);
+  try { updateAiStatus(); } catch(e){}      // 侧栏那行状态跟着变，别还写着"没接上"
+}
+function saveSettings(){
+  applyAiInputs();
   STATE.settings.proxy = $('setProxy').value.trim();
   STATE.settings.ttl = parseInt($('setTtl').value,10) || 30;
   Store.set('settings', STATE.settings);
@@ -1135,13 +1278,20 @@ function saveSource(){
   renderSources();
   toast('已添加，点刷新抓取');
 }
-function showDigest(){
+function showDigest(force){
   var mask = $('digestMask');
   var content = $('digestContent');
   mask.classList.add('show');
   content.textContent = '生成中…';
-  generateDigest().then(function(text){ content.textContent = text; })
-    .catch(function(e){ content.textContent = 'AI 没接上：' + (e.message || '请检查设置'); });
+  generateDigest(force).then(function(text){ content.textContent = text; })
+    .catch(function(e){
+      if (window.__xbDigest) {      // 现场生成不了，就把云端烤好的端上来，别让人对着报错
+        content.textContent = window.__xbDigest;
+        toast('现场生成不了，显示的是云端今日简报');
+        return;
+      }
+      content.textContent = (e && e.message) || '简报生成失败，请检查设置';
+    });
 }
 
 function openMobileDrawer(){ $('colSources').classList.add('open'); }
@@ -1270,15 +1420,31 @@ function registerActions(){
 function bindEvents(){
   $('btnRefresh').onclick = refreshAll;
   $('btnSettings').onclick = openSettings;
-  $('btnDigest').onclick = showDigest;
+  $('btnDigest').onclick = function(){ showDigest(false); };   // 先看云端烤好的：快、不花钱
   $('btnAddSource').onclick = openAddSource;
   $('btnMenu').onclick = toggleSidebar;
   $('btnCloseSettings').onclick = function(){ $('settingsMask').classList.remove('show'); };
   $('btnSaveSettings').onclick = saveSettings;
+  $('btnTestAi').onclick = function(){
+    applyAiInputs();
+    var out = $('aiTestOut');
+    out.textContent = '测试中…（最多等 20 秒）';
+    var t0 = now();
+    aiChat([{ role:'user', content:'只回两个字：可以' }], false)
+      .then(function(txt){
+        out.textContent = '✅ 通了（' + ((now()-t0)/1000).toFixed(1) + ' 秒）：'
+          + String(txt).replace(/\s+/g,' ').trim().slice(0,40)
+          + (HAS_HOST ? '　—— 走的是象览宿主' : '　—— 走的是你填的地址');
+      })
+      .catch(function(e){
+        out.textContent = '❌ ' + ((e && e.message) || '失败')
+          + (HAS_HOST ? '（走的是象览宿主）' : '（走的是你填的地址）');
+      });
+  };
   $('btnCloseSource').onclick = function(){ $('sourceMask').classList.remove('show'); };
   $('btnSaveSource').onclick = saveSource;
   $('btnCloseDigest').onclick = function(){ $('digestMask').classList.remove('show'); };
-  $('btnGenDigest').onclick = showDigest;
+  $('btnGenDigest').onclick = function(){ showDigest(true); };    // 「重新生成」= 强制现场调一次 AI
   $('searchInput').oninput = function(e){ STATE.search = e.target.value.trim(); renderNewsList(); };
   $('sortSelect').onchange = function(e){ STATE.sort = e.target.value; renderNewsList(); };
   document.querySelectorAll('.source-item[data-filter]').forEach(function(el0){
@@ -1307,9 +1473,13 @@ function boot(){
     return Store.get('notes', {});
   }).then(function(notes){
     STATE.notes = notes || {};
+    return Store.get('stars', {});
+  }).then(function(stars){
+    STATE.stars = stars || {};
     return Store.get('ui', null);
   }).then(function(ui){
     if (ui) STATE.ui = ui;
+    applyTheme();
     applySidebar();
     bindEvents();
     renderAll();
