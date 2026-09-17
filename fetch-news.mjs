@@ -184,8 +184,39 @@ function mergeDedupe(all) {
   return [...byKey.values()].sort((a, b) => (b.time || 0) - (a.time || 0));
 }
 
+// 今日简报：一天只生成一次（复用仓库里已有的 news.json），避免每 30 分钟烧一次
+function bjDate(ts) {
+  return new Date(ts + 8 * 3600 * 1000).toISOString().slice(0, 10);
+}
+
+async function makeDigest(items, prev) {
+  const today = bjDate(Date.now());
+  if (!AI_KEY) return { digest: '', digestDate: '' };
+  if (prev && prev.digest && prev.digestDate === today) {
+    console.log(`  ♻️  复用今天的简报（${prev.digestDate}），不再调 AI`);
+    return { digest: prev.digest, digestDate: prev.digestDate };
+  }
+  const top = items.slice(0, 40);
+  if (top.length < 3) return { digest: '', digestDate: '' };
+  const lines = top.map((it, i) => `${i + 1}. [${it.cat || ''}] ${it.title}`).join('\n');
+  const prompt = `今天是 ${today}。你是新闻主编。根据下面今天的新闻标题，写一份 300 字左右的中文每日简报，`
+    + '按主题聚合（如科技、财经、国际、生活、酒店、零售），每段 2-3 句。不要编造，只基于标题。'
+    + '开头直接写「每日简报（' + today + '）」这样的日期，不要写"X月X日"这类占位。\n\n' + lines;
+  try {
+    const text = await aiChat([{ role: 'user', content: prompt }], false);
+    console.log('  ✅ 已生成今天的简报');
+    return { digest: String(text || '').trim(), digestDate: today };
+  } catch (e) {
+    console.log('  ⚠️ 简报生成失败：' + e.message);
+    return { digest: '', digestDate: '' };
+  }
+}
+
 (async () => {
   const base = Date.now();
+  // 仓库里已有的 news.json（Actions 会 checkout 下来）→ 用来复用简报
+  let prev = null;
+  try { prev = JSON.parse(fs.readFileSync(path.resolve('news.json'), 'utf8')); } catch (e) {}
   const all = [];
   const results = await Promise.allSettled([
     ...SOURCES.filter(s => s.enabled !== false).map(async s => {
@@ -211,9 +242,11 @@ function mergeDedupe(all) {
   console.log(`\n合并去重后 ${items.length} 条，开始 AI 摘要…`);
   await enrich(items);
 
-  const out = { updated: Date.now(), updatedISO: new Date().toISOString(), count: items.length, items };
+  const dg = await makeDigest(items, prev);
+  const out = { updated: Date.now(), updatedISO: new Date().toISOString(), count: items.length,
+                digest: dg.digest, digestDate: dg.digestDate, items };
   const dest = path.resolve('news.json');
   fs.writeFileSync(dest, JSON.stringify(out));
-  console.log(`\n已写出 ${dest}（${items.length} 条，${(fs.statSync(dest).size / 1024).toFixed(0)} KB，其中 ${items.filter(i => i.summary).length} 条带 AI 摘要）`);
+  console.log(`\n已写出 ${dest}（${items.length} 条，${(fs.statSync(dest).size / 1024).toFixed(0)} KB，`
+    + `其中 ${items.filter(i => i.summary).length} 条带 AI 摘要，简报 ${dg.digest ? '有' : '无'}）`);
 })();
-
