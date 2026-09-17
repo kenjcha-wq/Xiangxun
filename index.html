@@ -1,0 +1,1337 @@
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>象讯 · 见你所见</title>
+<style>
+  :root{
+    --bg:#f4f5f7; --panel:#ffffff; --panel-soft:#eef0f3; --text:#1a1a1a; --sub:#6b7280;
+    --line:#e5e7eb; --accent:#2563eb; --accent-soft:#dbeafe; --danger:#dc2626; --ok:#16a34a;
+    --logo-accent:#e07b39;
+    --radius:10px; --shadow:0 1px 2px rgba(0,0,0,.05);
+    --ele-ear:#7c9fd4; --ele-head:#9db8e0; --ele-eye:#1a1a1a;
+    --font-body:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    --font-logo:Georgia,"Songti SC","STSong",serif;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#0f1115; --panel:#14171d; --panel-soft:#1a1e26; --text:#e5e7eb; --sub:#9ca3af;
+      --line:#262b36; --accent:#60a5fa; --accent-soft:#1e293b; --danger:#f87171; --ok:#4ade80;
+      --logo-accent:#e8924f;
+      --shadow:0 1px 2px rgba(0,0,0,.4);
+      --ele-ear:#4a6da3; --ele-head:#6b8fc7; --ele-eye:#e5e7eb;
+    }
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:var(--font-body);
+    font-size:14px; line-height:1.7; font-weight:400;
+    letter-spacing:.2px;
+    -webkit-font-smoothing:antialiased;
+    -moz-osx-font-smoothing:grayscale;
+  }
+  button{font:inherit;cursor:pointer;letter-spacing:.2px}
+  input,select,textarea{font:inherit;color:inherit;letter-spacing:.2px}
+  .app{display:flex;flex-direction:column;height:100vh;height:100dvh}
+
+  /* 顶栏 */
+  header{
+    display:flex;align-items:center;gap:12px;padding:12px 18px;
+    background:var(--panel);
+    border-bottom:none;
+    box-shadow:var(--shadow);
+    flex:0 0 auto;
+    position:relative;z-index:5;
+  }
+  header .logo{display:flex;align-items:center;gap:9px}
+  header .logo-text{
+    font-family:var(--font-logo);
+    font-weight:600;font-size:19px;letter-spacing:1px;line-height:1;
+  }
+  header .logo-text span{color:var(--logo-accent)}
+  .logo-avatar{flex:0 0 auto;border-radius:50%;display:block}
+  header .slogan{
+    font-size:12px;color:var(--sub);letter-spacing:.6px;
+    padding-left:12px;border-left:1px solid var(--line);
+    line-height:1;white-space:nowrap;
+  }
+  @media (max-width: 640px){ header .slogan{display:none} }
+  header .grow{flex:1}
+  header button, .btn{
+    background:transparent;border:1px solid var(--line);color:var(--text);
+    padding:5px 11px;border-radius:8px;transition:.15s;font-size:13px;
+  }
+  header button:hover,.btn:hover{border-color:var(--accent);color:var(--accent)}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .btn.primary:hover{opacity:.9;color:#fff}
+  .btn.danger{color:var(--danger);border-color:var(--danger)}
+
+  /* 主体 */
+  .main{display:flex;flex:1;min-height:0}
+
+  .col-sources{
+    width:230px;flex:0 0 230px;
+    background:var(--panel);
+    overflow:auto;
+    padding-bottom:16px;
+    transition:width .22s ease, flex-basis .22s ease, opacity .18s ease;
+  }
+  .app.sidebar-collapsed .col-sources{
+    width:0;flex-basis:0;opacity:0;overflow:hidden;padding:0;
+  }
+
+  .col-list{
+    width:380px;flex:0 0 380px;
+    overflow:auto;
+    background:var(--bg);
+    transition:width .22s ease, flex-basis .22s ease;
+  }
+  .app.sidebar-collapsed .col-list{
+    width:420px;flex-basis:420px;
+  }
+
+  .col-read{flex:1;min-width:0;overflow:auto;background:var(--bg)}
+
+  .section-title{
+    padding:12px 16px 4px;font-size:11px;color:var(--sub);
+    text-transform:uppercase;letter-spacing:1.2px;font-weight:500;
+  }
+
+  /* 左栏条目 */
+  .source-item,.tag-item{
+    display:flex;align-items:center;gap:8px;
+    padding:8px 12px;margin:2px 8px;
+    border-radius:8px;cursor:pointer;
+    transition:background .15s,color .15s;
+    font-size:13.5px;
+  }
+  .source-item:hover,.tag-item:hover{background:var(--accent-soft)}
+  .source-item.active,.tag-item.active{background:var(--accent-soft);color:var(--accent)}
+  .source-item .name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .source-item .badge{font-size:11px;color:var(--sub)}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--ok);flex:0 0 auto}
+  .dot.off{background:#9ca3af}
+  .dot.err{background:var(--danger)}
+
+  /* 工具条 */
+  .toolbar{
+    display:flex;gap:6px;align-items:center;padding:12px 14px;
+    background:transparent;position:sticky;top:0;z-index:2;flex-wrap:wrap;
+    backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+  }
+  .toolbar input[type=search]{
+    flex:1;min-width:100px;padding:8px 14px;
+    border:none;border-radius:20px;background:var(--panel);
+    outline:none;font-size:13.5px;
+  }
+  .toolbar input[type=search]:focus{box-shadow:0 0 0 2px var(--accent-soft)}
+  .toolbar select{
+    padding:7px 12px;border:none;border-radius:20px;background:var(--panel);
+    outline:none;font-size:13px;
+  }
+
+  /* 新闻条目 */
+  .news-item{
+    padding:13px 16px;margin:2px 8px;
+    border-radius:8px;cursor:pointer;position:relative;
+    transition:background .15s;
+  }
+  .news-item:hover{background:var(--accent-soft)}
+  .news-item.active{background:var(--accent-soft)}
+  .news-item.unread .title{font-weight:500}
+  .news-item .title{
+    font-size:14.5px;line-height:1.55;margin-bottom:4px;font-weight:400;
+    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
+  }
+  .news-item .meta{font-size:12px;color:var(--sub);display:flex;gap:8px;flex-wrap:wrap;letter-spacing:.3px;align-items:center}
+  .news-item .meta .notemark{
+    color:var(--logo-accent);font-size:11px;border:1px solid var(--logo-accent);
+    padding:0 5px;border-radius:5px;line-height:1.5;
+  }
+  .news-item .tags{margin-top:6px;display:flex;gap:5px;flex-wrap:wrap}
+  .tag{font-size:11px;background:var(--accent-soft);color:var(--accent);padding:2px 8px;border-radius:6px;letter-spacing:.3px}
+  .tag.cat{background:var(--panel-soft);color:var(--sub)}
+  .news-item .summary{
+    font-size:12.5px;color:var(--sub);margin-top:5px;line-height:1.6;
+    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
+  }
+  .empty{padding:40px 20px;text-align:center;color:var(--sub)}
+
+  /* 阅读区 */
+  .reader{display:flex;flex-direction:column;height:100%}
+  .reader-head{
+    padding:18px 22px;background:var(--panel);
+    box-shadow:var(--shadow);position:sticky;top:0;z-index:2;
+  }
+  .reader-head h2{margin:0 0 8px;font-size:19px;line-height:1.5;font-weight:600;letter-spacing:.3px}
+  .reader-head .meta{font-size:12px;color:var(--sub);display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .reader-body{padding:20px;overflow:auto;flex:1}
+  .reader-body .summary-box{
+    background:var(--panel);border-radius:var(--radius);
+    padding:14px 18px;margin-bottom:16px;box-shadow:var(--shadow);
+    font-size:13.5px;line-height:1.8;
+  }
+  .reader-body .summary-box h4{margin:0 0 7px;font-size:12px;color:var(--accent);letter-spacing:.8px;font-weight:500}
+  .reader-body iframe{width:100%;height:70vh;border:none;border-radius:var(--radius);background:#fff}
+  .reader-actions{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+  .placeholder{padding:60px 20px;text-align:center;color:var(--sub)}
+
+  /* 笔记区 */
+  .note-box{
+    background:var(--panel);border-radius:var(--radius);
+    padding:14px 18px;margin-bottom:16px;box-shadow:var(--shadow);
+    border-left:3px solid var(--logo-accent);
+  }
+  .note-box h4{
+    margin:0 0 8px;font-size:12px;color:var(--logo-accent);
+    letter-spacing:.8px;font-weight:500;display:flex;align-items:center;gap:6px;
+  }
+  .note-box h4 .note-status{font-size:11px;color:var(--sub);font-weight:400;letter-spacing:0}
+  .note-box textarea{
+    width:100%;min-height:90px;resize:vertical;
+    padding:10px 12px;border:1px solid var(--line);border-radius:8px;
+    background:var(--bg);outline:none;line-height:1.7;font-size:13.5px;
+  }
+  .note-box textarea:focus{border-color:var(--logo-accent)}
+  .note-box .note-hint{font-size:11px;color:var(--sub);margin-top:6px}
+
+  /* 弹窗 */
+  .modal-mask{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;z-index:50;padding:16px}
+  .modal-mask.show{display:flex}
+  .modal{background:var(--panel);border-radius:var(--radius);max-width:560px;width:100%;max-height:86vh;overflow:auto;padding:22px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+  .modal h3{margin:0 0 14px;font-size:16px;font-weight:600}
+  .modal label{display:block;font-size:12px;color:var(--sub);margin:12px 0 5px}
+  .modal input,.modal select,.modal textarea{
+    width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:8px;background:var(--bg);
+  }
+  .modal .row{display:flex;gap:8px;margin-top:18px;justify-content:flex-end}
+  .modal .hint{font-size:12px;color:var(--sub);margin-top:6px;line-height:1.6}
+  .modal .kv{display:flex;gap:8px;align-items:center;margin-top:8px}
+  .modal .kv label{margin:0;flex:1}
+
+  #toast{position:fixed;left:50%;bottom:30px;transform:translateX(-50%);background:#111;color:#fff;padding:9px 18px;border-radius:8px;font-size:13px;opacity:0;transition:.25s;pointer-events:none;z-index:99;max-width:80vw}
+  #toast.show{opacity:.95}
+
+  @media (max-width: 820px){
+    .col-sources{position:fixed;left:0;top:0;bottom:0;z-index:40;transform:translateX(-100%);transition:.25s;box-shadow:4px 0 16px rgba(0,0,0,.2);width:230px;flex-basis:230px;opacity:1}
+    .col-sources.open{transform:none}
+    .app.sidebar-collapsed .col-sources{width:230px;flex-basis:230px;opacity:1;padding-bottom:16px}
+    .col-list{width:100%;flex:1 1 auto}
+    .app.sidebar-collapsed .col-list{width:100%;flex:1 1 auto}
+    .col-read{display:none}
+    .col-read.mobile-show{display:flex;position:fixed;inset:0;z-index:45;background:var(--bg)}
+    .hide-mobile{display:none}
+  }
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <header>
+    <button id="btnMenu" title="收起/展开侧栏">☰</button>
+    <div class="logo">
+      <svg class="logo-avatar" viewBox="0 0 40 40" width="30" height="30" aria-hidden="true">
+        <ellipse cx="9" cy="18" rx="7" ry="9" fill="var(--ele-ear)"/>
+        <ellipse cx="31" cy="18" rx="7" ry="9" fill="var(--ele-ear)"/>
+        <circle cx="20" cy="20" r="12" fill="var(--ele-head)"/>
+        <path d="M20 30 q0 6 3 7" stroke="var(--ele-head)" stroke-width="5" fill="none" stroke-linecap="round"/>
+        <circle cx="15.5" cy="18" r="2" fill="var(--ele-eye)"/>
+        <circle cx="24.5" cy="18" r="2" fill="var(--ele-eye)"/>
+        <circle cx="16.2" cy="17.3" r="0.7" fill="#fff"/>
+        <circle cx="25.2" cy="17.3" r="0.7" fill="#fff"/>
+      </svg>
+      <span class="logo-text">象<span>讯</span></span>
+    </div>
+    <div class="slogan">见你所见</div>
+    <div class="grow"></div>
+    <button id="btnDigest" title="今日简报">简报</button>
+    <button id="btnRefresh" title="刷新">刷新</button>
+    <button id="btnSettings" title="设置">设置</button>
+  </header>
+
+  <div class="main">
+    <aside class="col-sources" id="colSources">
+      <div class="section-title">全部</div>
+      <div class="source-item active" data-filter="all">
+        <div class="name">全部新闻</div><div class="badge" id="cntAll">0</div>
+      </div>
+      <div class="source-item" data-filter="unread">
+        <div class="name">只看未读</div><div class="badge" id="cntUnread">0</div>
+      </div>
+      <div class="source-item" data-filter="noted">
+        <div class="name">Notebook</div><div class="badge" id="cntNoted">0</div>
+      </div>
+
+      <div class="section-title">分类</div>
+      <div id="catList"></div>
+
+      <div class="section-title">标签</div>
+      <div id="tagList"></div>
+
+      <div class="section-title">新闻源</div>
+      <div id="sourceList"></div>
+      <div style="padding:10px 14px">
+        <button class="btn" id="btnAddSource" style="width:100%">+ 添加源</button>
+      </div>
+
+      <div class="section-title">AI 加工</div>
+      <div style="padding:0 14px 14px">
+        <div class="kv" style="display:flex;align-items:center;gap:6px;margin:6px 0">
+          <input type="checkbox" id="aiSummary"><label for="aiSummary" style="flex:1;font-size:13px">自动摘要</label>
+        </div>
+        <div class="kv" style="display:flex;align-items:center;gap:6px;margin:6px 0">
+          <input type="checkbox" id="aiTags"><label for="aiTags" style="flex:1;font-size:13px">自动打标签</label>
+        </div>
+        <div class="kv" style="display:flex;align-items:center;gap:6px;margin:6px 0">
+          <input type="checkbox" id="aiDedupe"><label for="aiDedupe" style="flex:1;font-size:13px">AI 去重合并</label>
+        </div>
+        <div id="aiStatus" style="font-size:12px;color:var(--sub);margin-top:6px"></div>
+      </div>
+    </aside>
+
+    <section class="col-list" id="colList">
+      <div class="toolbar">
+        <input type="search" id="searchInput" placeholder="搜索标题/摘要…">
+        <select id="sortSelect">
+          <option value="time">按时间</option>
+          <option value="source">按来源</option>
+        </select>
+      </div>
+      <div id="newsList"></div>
+    </section>
+
+    <section class="col-read" id="colRead">
+      <div class="placeholder" id="readerPlaceholder">← 从列表选一条新闻</div>
+      <div class="reader" id="reader" style="display:none"></div>
+    </section>
+  </div>
+</div>
+
+<!-- 设置 -->
+<div class="modal-mask" id="settingsMask">
+  <div class="modal">
+    <h3>设置</h3>
+    <label>AI Key（仅无宿主时使用，只存在你这台设备上）</label>
+    <input type="password" id="setAiKey" placeholder="sk-...">
+    <div class="hint">key 只存在你这台设备上（localStorage），不会上传。有象览宿主时优先走宿主 AI。</div>
+
+    <label>AI 接口地址（无宿主时可选，兼容 OpenAI 格式）</label>
+    <input type="text" id="setAiBase" placeholder="https://api.openai.com/v1/chat/completions">
+    <label>模型名</label>
+    <input type="text" id="setAiModel" placeholder="gpt-4o-mini">
+
+    <label>自建代理前缀（无宿主时用于绕过 CORS）</label>
+    <input type="text" id="setProxy" placeholder="https://your-proxy.com/?url=">
+    <div class="hint">没有宿主时，新闻源大多被 CORS 拦截；填一个自己搭的代理前缀即可。</div>
+
+    <label>缓存 TTL（分钟）</label>
+    <input type="number" id="setTtl" min="1" value="30">
+
+    <div class="row">
+      <button class="btn" id="btnCloseSettings">关闭</button>
+      <button class="btn primary" id="btnSaveSettings">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 添加源 -->
+<div class="modal-mask" id="sourceMask">
+  <div class="modal">
+    <h3>添加新闻源</h3>
+    <label>名字</label>
+    <input type="text" id="srcName" placeholder="例如：36kr">
+    <label>URL（RSS / Atom / JSON）</label>
+    <input type="text" id="srcUrl" placeholder="https://...">
+    <label>分类</label>
+    <input type="text" id="srcCat" placeholder="科技 / 财经 / 国际…">
+    <label>类型</label>
+    <select id="srcType">
+      <option value="rss">RSS / Atom</option>
+      <option value="json">JSON</option>
+    </select>
+    <div class="kv" style="margin-top:10px">
+      <input type="checkbox" id="srcProxy">
+      <label for="srcProxy">需要代理（国内直连不通）</label>
+    </div>
+    <div class="row">
+      <button class="btn" id="btnCloseSource">取消</button>
+      <button class="btn primary" id="btnSaveSource">添加</button>
+    </div>
+  </div>
+</div>
+
+<!-- 简报 -->
+<div class="modal-mask" id="digestMask">
+  <div class="modal" style="max-width:680px">
+    <h3>今日简报</h3>
+    <div id="digestContent" class="content" style="white-space:pre-wrap;font-size:13px;line-height:1.8;min-height:80px"></div>
+    <div class="row">
+      <button class="btn" id="btnCloseDigest">关闭</button>
+      <button class="btn primary" id="btnGenDigest">重新生成</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+(function(){
+'use strict';
+
+var XL = window.xianglan || null;
+var HAS_HOST = !!(XL && typeof XL.call === 'function');
+
+function $(id){ return document.getElementById(id); }
+function el(tag, cls, txt){
+  var e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (txt != null) e.textContent = txt;
+  return e;
+}
+function toast(msg, ms){
+  var t = $('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toast._t);
+  toast._t = setTimeout(function(){ t.classList.remove('show'); }, ms || 2200);
+}
+function now(){ return Date.now(); }
+function fmtTime(ts){
+  if (!ts) return '';
+  var d = new Date(ts);
+  var diff = (now() - ts) / 1000;
+  if (diff < 60) return '刚刚';
+  if (diff < 3600) return Math.floor(diff/60) + ' 分钟前';
+  if (diff < 86400) return Math.floor(diff/3600) + ' 小时前';
+  var m = d.getMonth()+1, day = d.getDate();
+  return m + '月' + day + '日';
+}
+function safeJson(s, d){ try { return JSON.parse(s); } catch(e){ return d; } }
+function normTitle(t){
+  return (t || '').replace(/\s+/g,'').replace(/[【】\[\]（）()《》<>「」""''·,，.。!！?？:：;；\-—_]/g,'').toLowerCase();
+}
+function domainOf(u){ try { return new URL(u).hostname.replace(/^www\./,''); } catch(e){ return ''; } }
+function uid(s){ var h=0,i; s=String(s); for(i=0;i<s.length;i++){ h=(h<<5)-h+s.charCodeAt(i); h|=0; } return 'n'+Math.abs(h).toString(36); }
+
+/* 分类规则 */
+var CATEGORY_RULES = [
+  { name:'科技', words:['AI','人工智能','芯片','算法','开源','编程','手机','苹果','华为','小米','特斯拉','互联网','软件','数据','机器人','算力','大模型','系统','应用'] },
+  { name:'财经', words:['股','基金','融资','上市','财报','GDP','央行','利率','房价','经济','营收','亏损','市值','投资','IPO','债务','贸易','关税'] },
+  { name:'国际', words:['美国','俄罗斯','乌克兰','欧盟','联合国','外交','总统','制裁','中东','以色列','伊朗','朝鲜','白宫','北约','峰会','协议'] },
+  { name:'社会', words:['警方','事故','法院','火灾','地震','救援','通报','调查','起诉','判决','遇难','失联'] },
+  { name:'生活', words:['健康','美食','旅游','教育','育儿','睡眠','减肥','医院','疫苗','养生','心理','消费','出行'] },
+  { name:'体育', words:['比赛','夺冠','赛季','奥运','球队','进球','联赛','冠军','球员','世界杯','决赛','教练'] },
+  { name:'娱乐', words:['电影','演员','综艺','票房','歌手','演唱会','剧集','导演','明星','首映','音乐','粉丝'] },
+];
+function classifyItem(it){
+  var text = (it.title || '') + ' ' + (it.desc || '') + ' ' + (it.summary || '');
+  var hit = [];
+  CATEGORY_RULES.forEach(function(rule){
+    var score = 0;
+    rule.words.forEach(function(w){ if (text.indexOf(w) >= 0) score++; });
+    if (score > 0) hit.push({ name: rule.name, score: score });
+  });
+  hit.sort(function(a,b){ return b.score - a.score; });
+  return hit.slice(0, 2).map(function(h){ return h.name; });
+}
+
+/* 存储 */
+var Store = (function(){
+  var LS_PREFIX = 'xiangxun:';
+  var FILE_MAP = {
+    sources: 'xiangxun_sources.json',
+    cache:   'xiangxun_cache.json',
+    read:    'xiangxun_read.json',
+    settings:'xiangxun_settings.json',
+    ui:      'xiangxun_ui.json'
+  };
+  function lsGet(key, d){
+    try { var v = localStorage.getItem(LS_PREFIX + key); return v ? JSON.parse(v) : d; }
+    catch(e){ return d; }
+  }
+  function lsSet(key, val){
+    try { localStorage.setItem(LS_PREFIX + key, JSON.stringify(val)); } catch(e){}
+  }
+  function get(key, d){
+    if (HAS_HOST && XL.call) {
+      return XL.call('readFile', { path: FILE_MAP[key] })
+        .then(function(res){
+          if (res && res.ok !== false && typeof res.text === 'string') return safeJson(res.text, d);
+          if (res && typeof res === 'string') return safeJson(res, d);
+          return lsGet(key, d);
+        })
+        .catch(function(){ return lsGet(key, d); });
+    }
+    return Promise.resolve(lsGet(key, d));
+  }
+  function set(key, val){
+    lsSet(key, val);
+    if (HAS_HOST && XL.call) {
+      return XL.call('writeFile', { path: FILE_MAP[key], text: JSON.stringify(val) }).catch(function(){});
+    }
+    return Promise.resolve();
+  }
+  return { get: get, set: set };
+})();
+
+var STATE = {
+  sources: [],
+  news: [],
+  read: {},
+  notes: {},          // { id: '笔记内容' }
+  ui: { sidebarCollapsed:false },
+  settings: {
+    aiKey: '', aiBase: '', aiModel: 'gpt-4o-mini',
+    proxy: '', ttl: 30,
+    aiSummary: true, aiTags: true, aiDedupe: false
+  },
+  filter: { type:'all', value:'' },
+  search: '',
+  sort: 'time',
+  currentId: null,
+  sourceErrors: {},
+  lastFetch: 0
+};
+
+var BUILTIN_SOURCES = [
+  { id:'s_jiemian', name:'界面新闻', cat:'商业', url:'https://a.jiemian.com/index.php?m=article&a=rss', type:'rss', enabled:true, proxy:false },
+  { id:'s_wscn', name:'华尔街见闻', cat:'商业', url:'https://dedicated.wallstreetcn.com/rss.xml', type:'rss', enabled:true, proxy:false },
+  { id:'s_tmtpost', name:'钛媒体', cat:'商业', url:'https://www.tmtpost.com/rss.xml', type:'rss', enabled:true, proxy:false },
+  { id:'s_xueqiu', name:'雪球今日话题', cat:'商业', url:'https://xueqiu.com/hots/topic/rss', type:'rss', enabled:true, proxy:false },
+  { id:'s_ithome', name:'IT之家', cat:'科技', url:'https://www.ithome.com/rss/', type:'rss', enabled:true, proxy:false },
+  { id:'s_ifanr', name:'爱范儿', cat:'科技', url:'https://www.ifanr.com/feed', type:'rss', enabled:true, proxy:false },
+  { id:'s_geekpark', name:'极客公园', cat:'科技', url:'https://www.geekpark.net/rss', type:'rss', enabled:true, proxy:false },
+  { id:'s_leiphone', name:'雷锋网', cat:'科技', url:'https://www.leiphone.com/feed', type:'rss', enabled:true, proxy:false },
+  { id:'s_sspai', name:'少数派', cat:'科技', url:'https://sspai.com/feed', type:'rss', enabled:true, proxy:false },
+  { id:'s_dgtle', name:'数字尾巴', cat:'科技', url:'https://www.dgtle.com/rss/dgtle.xml', type:'rss', enabled:true, proxy:false },
+  { id:'s_solidot', name:'Solidot', cat:'科技', url:'https://www.solidot.org/index.rss', type:'rss', enabled:true, proxy:false },
+  { id:'s_douban_rv', name:'豆瓣热门影评', cat:'电影', url:'https://www.douban.com/feed/review/movie', type:'rss', enabled:true, proxy:false },
+  { id:'s_hotel', name:'酒店·签约开业', cat:'酒店', url:'http://127.0.0.1:8787/rss/hotel', type:'rss', enabled:true, proxy:false },
+  { id:'s_retail', name:'零售·首店选址', cat:'零售', url:'http://127.0.0.1:8787/rss/retail', type:'rss', enabled:true, proxy:false },
+  { id:'s_new0', name:'中新网', cat:'综合', url:'https://www.chinanews.com.cn/rss/scroll-news.xml', type:'rss', enabled:true, proxy:false },
+  { id:'s_new1', name:'新华网', cat:'综合', url:'http://www.xinhuanet.com/politics/news_politics.xml', type:'rss', enabled:false, proxy:false },
+  { id:'s_new2', name:'人民网·社会', cat:'社会', url:'http://www.people.com.cn/rss/society.xml', type:'rss', enabled:false, proxy:false },
+  { id:'s_new3', name:'经济观察网', cat:'财经', url:'http://www.eeo.com.cn/rss.xml', type:'rss', enabled:true, proxy:false },
+  { id:'s_new4', name:'豆瓣书评', cat:'文化', url:'https://www.douban.com/feed/review/book', type:'rss', enabled:true, proxy:false },
+  { id:'s_new5', name:'什么值得买', cat:'消费', url:'https://post.smzdm.com/feed/', type:'rss', enabled:true, proxy:false },
+  { id:'s_new6', name:'机核', cat:'游戏', url:'https://www.gcores.com/rss', type:'rss', enabled:true, proxy:false },
+  { id:'s_new7', name:'游研社', cat:'游戏', url:'https://www.yystv.cn/rss/feed', type:'rss', enabled:true, proxy:false },
+  { id:'s_movie', name:'电影·时光网', cat:'电影', url:'http://127.0.0.1:8787/rss/movie', type:'rss', enabled:true, proxy:false }
+];
+
+function hostFetch(url, opt){
+  opt = opt || {};
+  if (HAS_HOST && XL.call) {
+    return XL.call('http.fetch', {
+      url: url, method: opt.method || 'GET',
+      headers: opt.headers || {}, body: opt.body
+    });
+  }
+  return Promise.reject(new Error('no host'));
+}
+
+function fetchText(url){
+  if (HAS_HOST && XL.call) {
+    return hostFetch(url).then(function(res){
+      if (res && res.ok === false) throw new Error('HTTP ' + (res.status||''));
+      if (res && typeof res.text === 'string') return res.text;
+      if (typeof res === 'string') return res;
+      throw new Error('空响应');
+    }).catch(function(err){
+      return fallbackFetch(url).catch(function(){ throw err; });
+    });
+  }
+  return fallbackFetch(url);
+}
+
+function fallbackFetch(url){
+  var target = url;
+  if (STATE.settings.proxy) target = STATE.settings.proxy + encodeURIComponent(url);
+  return fetch(target, { method:'GET', headers:{ 'Accept':'application/rss+xml,application/atom+xml,application/json,text/xml,*/*' } })
+    .then(function(r){
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.text();
+    });
+}
+
+function limitConcurrent(tasks, limit){
+  return new Promise(function(resolve){
+    var results = new Array(tasks.length);
+    var idx = 0, running = 0, done = 0;
+    if (tasks.length === 0) return resolve(results);
+    function next(){
+      while (running < limit && idx < tasks.length) {
+        (function(i){
+          running++; idx++;
+          Promise.resolve().then(tasks[i])
+            .then(function(v){ results[i] = { ok:true, value:v }; })
+            .catch(function(e){ results[i] = { ok:false, error:e }; })
+            .then(function(){
+              running--; done++;
+              if (done === tasks.length) resolve(results);
+              else next();
+            });
+        })(idx);
+      }
+    }
+    next();
+  });
+}
+
+function parseRSS(text, source){
+  var items = [];
+  try {
+    var doc = new DOMParser().parseFromString(text, 'text/xml');
+    var nodes = doc.querySelectorAll('item');
+    if (!nodes.length) nodes = doc.querySelectorAll('entry');
+    for (var i=0;i<nodes.length;i++){
+      var n = nodes[i];
+      var title = txt(n, 'title');
+      var link = '';
+      var linkEl = n.querySelector('link');
+      if (linkEl) link = linkEl.getAttribute('href') || linkEl.textContent || '';
+      if (!link) link = txt(n, 'link');
+      var desc = txt(n, 'description') || txt(n, 'summary') || txt(n, 'content');
+      var pub = txt(n, 'pubDate') || txt(n, 'published') || txt(n, 'updated') || txt(n, 'date');
+      var ts = pub ? Date.parse(pub) : 0;
+      if (!ts || isNaN(ts)) ts = 0;
+      if (!title) continue;
+      items.push({
+        title: cleanText(title), link: link,
+        desc: cleanText(stripHtml(desc)).slice(0, 500),
+        source: source.name, sourceId: source.id, cat: source.cat,
+        time: ts || now(),
+        id: uid(normTitle(title) + '|' + domainOf(link))
+      });
+    }
+  } catch(e){}
+  return items;
+}
+function txt(node, tag){
+  var e = node.querySelector(tag);
+  return e ? (e.textContent || '').trim() : '';
+}
+function stripHtml(s){
+  if (!s) return '';
+  return String(s).replace(/<[^>]*>/g,' ').replace(/&nbsp;/g,' ').replace(/&amp;/g,'&')
+    .replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;/g,"'");
+}
+function cleanText(s){ return (s||'').replace(/\s+/g,' ').trim(); }
+
+function parseJSONFeed(text, source){
+  var items = [];
+  try {
+    var data = JSON.parse(text);
+    var list = [];
+    if (Array.isArray(data)) list = data;
+    else if (data.items && Array.isArray(data.items)) list = data.items;
+    else if (data.data && Array.isArray(data.data)) list = data.data;
+    else if (data.result && Array.isArray(data.result)) list = data.result;
+    for (var i=0;i<list.length && i<80;i++){
+      var it = list[i];
+      var title = it.title || it.name || it.headline || '';
+      var link = it.url || it.link || it.href || '';
+      var desc = it.summary || it.description || it.content || it.desc || '';
+      var pub = it.date_published || it.pubDate || it.published || it.date || it.time || '';
+      var ts = pub ? Date.parse(pub) : 0;
+      if (!ts || isNaN(ts)) ts = typeof pub === 'number' ? pub : 0;
+      if (!title) continue;
+      items.push({
+        title: cleanText(title), link: link,
+        desc: cleanText(stripHtml(desc)).slice(0,500),
+        source: source.name, sourceId: source.id, cat: source.cat,
+        time: ts || now(),
+        id: uid(normTitle(title) + '|' + domainOf(link))
+      });
+    }
+  } catch(e){}
+  return items;
+}
+
+function loadCache(){
+  return Store.get('cache', { ts:0, items:[] }).then(function(c){
+    if (c && c.items && (now() - (c.ts||0) < STATE.settings.ttl * 60000)) {
+      STATE.news = mergeDedupe(c.items);
+      STATE.lastFetch = c.ts;
+      return true;
+    }
+    return false;
+  });
+}
+function saveCache(){ return Store.set('cache', { ts: now(), items: STATE.news }); }
+
+function fetchBaked(){
+  // 云端跑好的现成结果（同源 news.json）。手机 / 任何浏览器就用这个：
+  // 不用现场抓、不用中转、不用 key、不用宿主 —— 打开就秒出。
+  return fetch('news.json?t=' + now(), { cache: 'no-store' })
+    .then(function(r){ if (!r.ok) throw new Error('no baked'); return r.json(); })
+    .then(function(d){
+      var items = (d && d.items) || [];
+      if (!items.length) return [];
+      if (now() - (d.updated || 0) > 6 * 3600 * 1000) return [];   // 超过 6 小时当没用
+      return items.map(function(x){
+        return { title:x.title, link:x.link, desc:x.desc || '', source:x.source || '', sourceId:'baked',
+                 cat:x.cat || '综合', time:x.time || now(), summary:x.summary || '', tags:x.tags || [],
+                 id: uid(normTitle(x.title) + '|' + domainOf(x.link)) };
+      });
+    })
+    .catch(function(){ return []; });
+}
+
+function fetchAllSources(force){
+  // 先看云端有没有跑好的现成结果；没有才现场抓（宿主 → 中转 → 直连）
+  return fetchBaked().then(function(baked){
+    if (baked && baked.length) {
+      STATE.news = mergeDedupe(baked.concat(STATE.news));
+      STATE.lastFetch = now();
+      return saveCache();
+    }
+    return fetchFromSources(force);
+  });
+}
+
+function fetchFromSources(force){
+  var enabled = STATE.sources.filter(function(s){ return s.enabled; });
+  if (!enabled.length) return Promise.resolve();
+  var tasks = enabled.map(function(src){
+    return function(){
+      return fetchSourceWithRetry(src).then(function(items){
+        STATE.sourceErrors[src.id] = null;
+        return items;
+      }).catch(function(err){
+        STATE.sourceErrors[src.id] = err.message || '抓取失败';
+        return [];
+      });
+    };
+  });
+  return limitConcurrent(tasks, 4).then(function(results){
+    var all = [];
+    results.forEach(function(r){ if (r.ok && r.value) all = all.concat(r.value); });
+    var old = STATE.news.slice();
+    STATE.news = mergeDedupe(all.concat(old));
+    STATE.lastFetch = now();
+    return saveCache();
+  });
+}
+
+function fetchSourceWithRetry(src){
+  function attempt(n){
+    return fetchText(src.url).then(function(text){
+      var items = src.type === 'json' ? parseJSONFeed(text, src) : parseRSS(text, src);
+      if (!items.length) throw new Error('解析出 0 条');
+      return items;
+    }).catch(function(err){
+      if (n > 0) return new Promise(function(res){ setTimeout(res, 800); }).then(function(){ return attempt(n-1); });
+      throw err;
+    });
+  }
+  return attempt(0);   // 不再重试：坏源只等一轮，别拖住整轮
+}
+
+function mergeDedupe(items){
+  var map = {}, out = [];
+  items.forEach(function(it){
+    if (!it || !it.title) return;
+    var key = normTitle(it.title).slice(0, 40) + '|' + domainOf(it.link);
+    if (map[key]) {
+      var exist = map[key];
+      if (exist.source.indexOf(it.source) < 0) exist.source += ' · ' + it.source;
+      if (it.desc && (!exist.desc || it.desc.length > exist.desc.length)) exist.desc = it.desc;
+      if (it.time && it.time > exist.time) exist.time = it.time;
+    } else {
+      it.id = it.id || uid(key);
+      if (!it.cats || !it.cats.length) it.cats = classifyItem(it);
+      map[key] = it;
+      out.push(it);
+    }
+  });
+  out.sort(function(a,b){ return (b.time||0) - (a.time||0); });
+  return out;
+}
+
+function aiAvailable(){
+  if (HAS_HOST && XL.call) return true;
+  return !!(STATE.settings.aiKey && STATE.settings.aiBase);
+}
+function aiChat(messages, jsonMode){
+  if (HAS_HOST && XL.call) {
+    return XL.call('ai.chat', { messages: messages, json: !!jsonMode })
+      .then(function(res){
+        if (!res) throw new Error('AI 无响应');
+        if (res.ok === false) throw new Error(res.error || 'AI 调用失败');
+        if (jsonMode && res.json) return res.json;
+        return res.text || (res.json ? JSON.stringify(res.json) : '');
+      })
+      .catch(function(err){ return userAiChat(messages, jsonMode).catch(function(){ throw err; }); });
+  }
+  return userAiChat(messages, jsonMode);
+}
+function userAiChat(messages, jsonMode){
+  if (!STATE.settings.aiKey || !STATE.settings.aiBase) return Promise.reject(new Error('AI 未配置'));
+  var body = { model: STATE.settings.aiModel || 'gpt-4o-mini', messages: messages, temperature: 0.3 };
+  if (jsonMode) body.response_format = { type:'json_object' };
+  return fetch(STATE.settings.aiBase, {
+    method:'POST',
+    headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer ' + STATE.settings.aiKey },
+    body: JSON.stringify(body)
+  }).then(function(r){
+    if (!r.ok) throw new Error('AI HTTP ' + r.status);
+    return r.json();
+  }).then(function(data){
+    var text = data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+    if (!text) throw new Error('AI 返回为空');
+    if (jsonMode) return safeJson(text, text);
+    return text;
+  });
+}
+
+function aiEnrichBatch(items){
+  if (!aiAvailable() || (!STATE.settings.aiSummary && !STATE.settings.aiTags)) return Promise.resolve();
+  var batchSize = 15, batches = [];
+  for (var i=0;i<items.length;i+=batchSize) batches.push(items.slice(i, i+batchSize));
+  var tasks = batches.map(function(batch){
+    return function(){
+      var lines = batch.map(function(it, idx){
+        return (idx+1) + '. 标题：' + it.title + '　摘要：' + (it.desc||'').slice(0,120);
+      }).join('\n');
+      var want = [];
+      if (STATE.settings.aiSummary) want.push('"summary":"2-3句中文摘要"');
+      if (STATE.settings.aiTags) want.push('"tags":["标签1","标签2"]');
+      var prompt = '你是新闻编辑。下面是' + batch.length + '条新闻，请逐条处理，返回 JSON 对象，'
+        + '键为序号字符串，值为对象，包含：' + want.join('，') + '。'
+        + '标签从这些里选：科技、财经、国际、生活、社会、体育、娱乐、健康、教育、热点。每条最多 3 个。'
+        + '只返回 JSON，不要解释。\n\n' + lines;
+      return aiChat([{ role:'user', content: prompt }], true).then(function(res){
+        var obj = res;
+        if (typeof res === 'string') obj = safeJson(res, {});
+        if (!obj || typeof obj !== 'object') return;
+        batch.forEach(function(it, idx){
+          var r = obj[String(idx+1)] || obj[idx+1];
+          if (!r) return;
+          if (r.summary && STATE.settings.aiSummary) it.summary = r.summary;
+          if (r.tags && STATE.settings.aiTags && Array.isArray(r.tags)) it.tags = r.tags.slice(0,3);
+        });
+      }).catch(function(){});
+    };
+  });
+  return limitConcurrent(tasks, 2);
+}
+
+function aiDedupe(){
+  if (!STATE.settings.aiDedupe || !aiAvailable()) return Promise.resolve();
+  var titles = STATE.news.slice(0, 60).map(function(it){ return it.title; });
+  if (titles.length < 2) return Promise.resolve();
+  var prompt = '下面是一组新闻标题，请找出描述同一件事的标题分组，返回 JSON 数组，每个元素是序号数组（从1开始）。'
+    + '只返回 JSON，不要解释。\n' + titles.map(function(t,i){ return (i+1)+'. '+t; }).join('\n');
+  return aiChat([{ role:'user', content: prompt }], true).then(function(res){
+    var groups = res;
+    if (typeof res === 'string') groups = safeJson(res, []);
+    if (!Array.isArray(groups)) return;
+    groups.forEach(function(g){
+      if (!Array.isArray(g) || g.length < 2) return;
+      var first = STATE.news[g[0]-1];
+      if (!first) return;
+      for (var i=1;i<g.length;i++){
+        var other = STATE.news[g[i]-1];
+        if (!other) continue;
+        if (first.source.indexOf(other.source) < 0) first.source += ' · ' + other.source;
+        other._dupOf = first.id;
+      }
+    });
+    STATE.news = STATE.news.filter(function(it){ return !it._dupOf; });
+  }).catch(function(){});
+}
+
+function generateDigest(){
+  if (!aiAvailable()) return Promise.reject(new Error('AI 没接上'));
+  var today = STATE.news.slice(0, 40);
+  if (!today.length) return Promise.reject(new Error('还没有新闻'));
+  var lines = today.map(function(it, i){ return (i+1) + '. [' + (it.cat||'') + '] ' + it.title; }).join('\n');
+  var prompt = '你是新闻主编。根据下面今天的新闻标题，写一份 300 字左右的中文每日简报，'
+    + '按主题聚合（如科技、财经、国际、生活），每段 2-3 句。不要编造，只基于标题。\n\n' + lines;
+  return aiChat([{ role:'user', content: prompt }], false);
+}
+
+/* 渲染 */
+function renderSources(){
+  var box = $('sourceList');
+  box.innerHTML = '';
+  STATE.sources.forEach(function(s){
+    var item = el('div', 'source-item');
+    item.dataset.id = s.id;
+    var dot = el('span', 'dot' + (s.enabled ? (STATE.sourceErrors[s.id] ? ' err' : '') : ' off'));
+    var name = el('div', 'name', s.name);
+    var badge = el('div', 'badge', s.cat || '');
+    item.appendChild(dot); item.appendChild(name); item.appendChild(badge);
+    item.title = s.url + (s.proxy ? '（需要代理）' : '');
+    item.onclick = function(){ STATE.filter = { type:'source', value:s.id }; renderAll(); closeMobileDrawer(); };
+    if (STATE.filter.type === 'source' && STATE.filter.value === s.id) item.classList.add('active');
+    box.appendChild(item);
+  });
+}
+
+function renderCats(){
+  var counts = {};
+  STATE.news.forEach(function(it){ (it.cats || []).forEach(function(c){ counts[c] = (counts[c]||0) + 1; }); });
+  var box = $('catList');
+  box.innerHTML = '';
+  CATEGORY_RULES.forEach(function(rule){
+    var n = counts[rule.name] || 0;
+    if (!n) return;
+    var item = el('div', 'tag-item');
+    item.appendChild(el('div', 'name', rule.name));
+    item.appendChild(el('div', 'badge', String(n)));
+    item.onclick = function(){ STATE.filter = { type:'cat', value: rule.name }; renderAll(); closeMobileDrawer(); };
+    if (STATE.filter.type === 'cat' && STATE.filter.value === rule.name) item.classList.add('active');
+    box.appendChild(item);
+  });
+}
+
+function renderTags(){
+  var counts = {};
+  STATE.news.forEach(function(it){ (it.tags || []).forEach(function(t){ counts[t] = (counts[t]||0) + 1; }); });
+  var box = $('tagList');
+  box.innerHTML = '';
+  var keys = Object.keys(counts).sort(function(a,b){ return counts[b]-counts[a]; });
+  keys.forEach(function(t){
+    var item = el('div', 'tag-item');
+    item.appendChild(el('div', 'name', t));
+    item.appendChild(el('div', 'badge', String(counts[t])));
+    item.onclick = function(){ STATE.filter = { type:'tag', value:t }; renderAll(); closeMobileDrawer(); };
+    if (STATE.filter.type === 'tag' && STATE.filter.value === t) item.classList.add('active');
+    box.appendChild(item);
+  });
+}
+
+function currentList(){
+  var list = STATE.news.slice();
+  if (STATE.filter.type === 'unread') list = list.filter(function(it){ return !STATE.read[it.id]; });
+  else if (STATE.filter.type === 'noted') list = list.filter(function(it){ return !!(STATE.notes[it.id] && STATE.notes[it.id].trim()); });
+  else if (STATE.filter.type === 'source') list = list.filter(function(it){ return it.sourceId === STATE.filter.value; });
+  else if (STATE.filter.type === 'tag') list = list.filter(function(it){ return (it.tags||[]).indexOf(STATE.filter.value) >= 0; });
+  else if (STATE.filter.type === 'cat') list = list.filter(function(it){ return (it.cats||[]).indexOf(STATE.filter.value) >= 0; });
+  if (STATE.search) {
+    var q = STATE.search.toLowerCase();
+    list = list.filter(function(it){
+      return (it.title||'').toLowerCase().indexOf(q) >= 0
+        || (it.desc||'').toLowerCase().indexOf(q) >= 0
+        || (it.summary||'').toLowerCase().indexOf(q) >= 0
+        || (STATE.notes[it.id]||'').toLowerCase().indexOf(q) >= 0;
+    });
+  }
+  if (STATE.sort === 'source') list.sort(function(a,b){ return (a.source||'').localeCompare(b.source||''); });
+  else list.sort(function(a,b){ return (b.time||0) - (a.time||0); });
+  return list;
+}
+
+function renderNewsList(){
+  var list = currentList();
+  var box = $('newsList');
+  box.innerHTML = '';
+  $('cntAll').textContent = String(STATE.news.length);
+  $('cntUnread').textContent = String(STATE.news.filter(function(it){ return !STATE.read[it.id]; }).length);
+  $('cntNoted').textContent = String(STATE.news.filter(function(it){ return !!(STATE.notes[it.id] && STATE.notes[it.id].trim()); }).length);
+  if (!list.length) {
+    box.appendChild(el('div', 'empty', STATE.news.length ? '没有匹配的新闻' : '点「刷新」抓取新闻'));
+    return;
+  }
+  list.forEach(function(it){
+    var item = el('div', 'news-item' + (STATE.read[it.id] ? '' : ' unread') + (STATE.currentId === it.id ? ' active' : ''));
+    item.dataset.id = it.id;
+    var title = el('div', 'title', it.title);
+    var meta = el('div', 'meta');
+    meta.appendChild(el('span', '', it.source || ''));
+    meta.appendChild(el('span', '', fmtTime(it.time)));
+    if (STATE.notes[it.id] && STATE.notes[it.id].trim()) {
+      meta.appendChild(el('span', 'notemark', '记'));
+    }
+    item.appendChild(title); item.appendChild(meta);
+    var tagRow = el('div', 'tags');
+    (it.cats || []).forEach(function(c){ tagRow.appendChild(el('span', 'tag cat', c)); });
+    (it.tags || []).forEach(function(t){ tagRow.appendChild(el('span', 'tag', t)); });
+    if (tagRow.childNodes.length) item.appendChild(tagRow);
+    if (it.summary) item.appendChild(el('div', 'summary', it.summary));
+    item.onclick = function(){ openNews(it.id); };
+    box.appendChild(item);
+  });
+}
+
+function openNews(id){
+  var it = STATE.news.filter(function(n){ return n.id === id; })[0];
+  if (!it) return;
+  STATE.currentId = id;
+  STATE.read[id] = true;
+  saveRead();
+  renderNewsList();
+  renderReader(it);
+  var colRead = $('colRead');
+  if (window.innerWidth <= 820) colRead.classList.add('mobile-show');
+}
+
+var noteSaveTimer = null;
+function renderReader(it){
+  var reader = $('reader');
+  var ph = $('readerPlaceholder');
+  ph.style.display = 'none';
+  reader.style.display = 'flex';
+  reader.innerHTML = '';
+  var head = el('div', 'reader-head');
+  var h2 = el('h2', '', it.title);
+  var meta = el('div', 'meta');
+  meta.appendChild(el('span', '', it.source || ''));
+  meta.appendChild(el('span', '', fmtTime(it.time)));
+  if (it.cat) meta.appendChild(el('span', '', it.cat));
+  head.appendChild(h2); head.appendChild(meta);
+  var actions = el('div', 'reader-actions');
+  var btnOpen = el('button', 'btn primary', '打开原文');
+  btnOpen.onclick = function(){ openExternal(it.link); };
+  var btnRead = el('button', 'btn', STATE.read[it.id] ? '标记未读' : '标记已读');
+  btnRead.onclick = function(){ STATE.read[it.id] = !STATE.read[it.id]; saveRead(); renderNewsList(); openNews(it.id); };
+  var btnClose = el('button', 'btn hide-mobile', '返回列表');
+  btnClose.onclick = function(){ $('colRead').classList.remove('mobile-show'); };
+  actions.appendChild(btnOpen); actions.appendChild(btnRead); actions.appendChild(btnClose);
+  head.appendChild(actions);
+  reader.appendChild(head);
+
+  var body = el('div', 'reader-body');
+
+  /* 笔记区（放在最上面，方便写） */
+  var noteBox = el('div', 'note-box');
+  var noteHead = el('h4');
+  noteHead.appendChild(document.createTextNode('我的笔记'));
+  var noteStatus = el('span', 'note-status', '');
+  noteHead.appendChild(noteStatus);
+  noteBox.appendChild(noteHead);
+  var ta = document.createElement('textarea');
+  ta.placeholder = '摘录、想法、感受…（自动保存）';
+  ta.value = STATE.notes[it.id] || '';
+  ta.oninput = function(){
+    noteStatus.textContent = '输入中…';
+    clearTimeout(noteSaveTimer);
+    noteSaveTimer = setTimeout(function(){
+      STATE.notes[it.id] = ta.value;
+      saveNotes().then(function(){
+        noteStatus.textContent = '已保存';
+        renderNewsList();
+        setTimeout(function(){ if (noteStatus.textContent === '已保存') noteStatus.textContent = ''; }, 1200);
+      });
+    }, 600);
+  };
+  noteBox.appendChild(ta);
+  var noteHint = el('div', 'note-hint', '笔记只存在你这台设备上。');
+  noteBox.appendChild(noteHint);
+  body.appendChild(noteBox);
+
+  if (it.summary || it.tags) {
+    var box = el('div', 'summary-box');
+    if (it.summary) { box.appendChild(el('h4', '', 'AI 摘要')); box.appendChild(el('div', '', it.summary)); }
+    if (it.tags && it.tags.length) {
+      box.appendChild(el('h4', '', '标签'));
+      var tags = el('div', 'tags');
+      it.tags.forEach(function(t){ tags.appendChild(el('span', 'tag', t)); });
+      box.appendChild(tags);
+    }
+    body.appendChild(box);
+  }
+  if (it.desc) {
+    var descBox = el('div', 'summary-box');
+    descBox.appendChild(el('h4', '', '摘要'));
+    descBox.appendChild(el('div', '', it.desc));
+    body.appendChild(descBox);
+  }
+  if (it.link) {
+    var iframe = document.createElement('iframe');
+    iframe.src = it.link;
+    iframe.setAttribute('sandbox', 'allow-same-origin allow-scripts allow-popups');
+    body.appendChild(iframe);
+  }
+  reader.appendChild(body);
+}
+
+function saveRead(){ return Store.set('read', STATE.read); }
+function saveNotes(){ return Store.set('notes', STATE.notes); }
+
+function renderAll(){
+  try { renderSources(); } catch(e){}
+  try { renderCats(); } catch(e){}
+  try { renderTags(); } catch(e){}
+  try { renderNewsList(); } catch(e){}
+  try { updateAiStatus(); } catch(e){}
+}
+
+function updateAiStatus(){
+  var s = '';
+  if (HAS_HOST && XL.call) s = 'AI：宿主可用';
+  else if (aiAvailable()) s = 'AI：用户 Key';
+  else s = 'AI 没接上（新闻照常显示）';
+  $('aiStatus').textContent = s;
+}
+
+function openExternal(url){
+  if (!url) return;
+  if (HAS_HOST && XL.call) {
+    XL.call('openExternal', { url: url }).catch(function(){ window.open(url, '_blank'); });
+  } else {
+    window.open(url, '_blank');
+  }
+}
+
+function refreshAll(){
+  toast('开始抓取…');
+  return fetchAllSources(true).then(function(){
+    return aiEnrichBatch(STATE.news.filter(function(it){ return !it.summary && !it.tags; }).slice(0, 45));
+  }).then(function(){ return aiDedupe(); })
+    .then(function(){ return saveCache(); })
+    .then(function(){
+      renderAll();
+      var errs = Object.keys(STATE.sourceErrors).filter(function(k){ return STATE.sourceErrors[k]; });
+      toast(errs.length ? ('完成，' + errs.length + ' 个源失败') : '刷新完成');
+    }).catch(function(e){ toast('刷新出错：' + (e.message||e)); });
+}
+
+function openSettings(){
+  $('setAiKey').value = STATE.settings.aiKey || '';
+  $('setAiBase').value = STATE.settings.aiBase || '';
+  $('setAiModel').value = STATE.settings.aiModel || '';
+  $('setProxy').value = STATE.settings.proxy || '';
+  $('setTtl').value = STATE.settings.ttl || 30;
+  $('settingsMask').classList.add('show');
+}
+function saveSettings(){
+  STATE.settings.aiKey = $('setAiKey').value.trim();
+  STATE.settings.aiBase = $('setAiBase').value.trim();
+  STATE.settings.aiModel = $('setAiModel').value.trim() || 'gpt-4o-mini';
+  STATE.settings.proxy = $('setProxy').value.trim();
+  STATE.settings.ttl = parseInt($('setTtl').value,10) || 30;
+  Store.set('settings', STATE.settings);
+  $('settingsMask').classList.remove('show');
+  updateAiStatus();
+  toast('设置已保存');
+}
+function openAddSource(){
+  $('srcName').value = ''; $('srcUrl').value = ''; $('srcCat').value = '';
+  $('sourceMask').classList.add('show');
+}
+function saveSource(){
+  var name = $('srcName').value.trim();
+  var url = $('srcUrl').value.trim();
+  if (!name || !url) { toast('名字和 URL 都要填'); return; }
+  var src = {
+    id: 's_' + now().toString(36),
+    name: name, url: url,
+    cat: $('srcCat').value.trim() || '未分类',
+    type: $('srcType').value,
+    enabled: true,
+    proxy: $('srcProxy').checked
+  };
+  STATE.sources.push(src);
+  Store.set('sources', STATE.sources);
+  $('sourceMask').classList.remove('show');
+  renderSources();
+  toast('已添加，点刷新抓取');
+}
+function showDigest(){
+  var mask = $('digestMask');
+  var content = $('digestContent');
+  mask.classList.add('show');
+  content.textContent = '生成中…';
+  generateDigest().then(function(text){ content.textContent = text; })
+    .catch(function(e){ content.textContent = 'AI 没接上：' + (e.message || '请检查设置'); });
+}
+
+function openMobileDrawer(){ $('colSources').classList.add('open'); }
+function closeMobileDrawer(){ $('colSources').classList.remove('open'); }
+
+/* 侧栏收起/展开 */
+function toggleSidebar(){
+  if (window.innerWidth <= 820) {
+    // 移动端：抽屉
+    var s = $('colSources');
+    if (s.classList.contains('open')) s.classList.remove('open');
+    else s.classList.add('open');
+    return;
+  }
+  STATE.ui.sidebarCollapsed = !STATE.ui.sidebarCollapsed;
+  applySidebar();
+  Store.set('ui', STATE.ui);
+}
+function applySidebar(){
+  var app = $('app');
+  if (STATE.ui.sidebarCollapsed) app.classList.add('sidebar-collapsed');
+  else app.classList.remove('sidebar-collapsed');
+}
+
+/* 动作申报 */
+function registerActions(){
+  if (!HAS_HOST || !XL.register) return;
+  try {
+    XL.register({
+      description: '象讯：查看今天新闻、搜索、生成简报、加源、标记已读。',
+      actions: {
+        today: {
+          description: '获取今天的新闻（按主题聚合的摘要列表）。',
+          params: { limit: { type:'number', description:'最多返回几条，默认 20', required:false } },
+          run: function(args){
+            var limit = (args && args.limit) || 20;
+            var list = STATE.news.slice(0, limit).map(function(it){
+              return { title: it.title, source: it.source, time: it.time, cat: it.cat,
+                       cats: it.cats||[], tags: it.tags || [], summary: it.summary || '', link: it.link };
+            });
+            return { count: list.length, items: list };
+          }
+        },
+        search: {
+          description: '按关键词、标签、分类或时间范围查询新闻。',
+          params: {
+            keyword: { type:'string', description:'搜索词', required:false },
+            tag: { type:'string', description:'标签', required:false },
+            category: { type:'string', description:'分类', required:false },
+            since: { type:'number', description:'起始时间戳(ms)', required:false },
+            limit: { type:'number', description:'最多返回几条', required:false }
+          },
+          run: function(args){
+            args = args || {};
+            var list = STATE.news.slice();
+            if (args.keyword) {
+              var q = String(args.keyword).toLowerCase();
+              list = list.filter(function(it){
+                return (it.title||'').toLowerCase().indexOf(q)>=0
+                  || (it.desc||'').toLowerCase().indexOf(q)>=0
+                  || (it.summary||'').toLowerCase().indexOf(q)>=0;
+              });
+            }
+            if (args.tag) list = list.filter(function(it){ return (it.tags||[]).indexOf(args.tag)>=0; });
+            if (args.category) list = list.filter(function(it){ return (it.cats||[]).indexOf(args.category)>=0; });
+            if (args.since) list = list.filter(function(it){ return (it.time||0) >= args.since; });
+            var limit = args.limit || 20;
+            return { count: Math.min(list.length, limit),
+              items: list.slice(0, limit).map(function(it){
+                return { title: it.title, source: it.source, time: it.time, cats: it.cats||[], tags: it.tags||[], link: it.link };
+              }) };
+          }
+        },
+        digest: {
+          description: '生成或读取今天的新闻简报。',
+          params: {},
+          run: function(){
+            return generateDigest().then(function(text){ return { digest: text }; })
+              .catch(function(e){ throw new Error('AI 没接上：' + (e.message||'')); });
+          }
+        },
+        addSource: {
+          description: '添加一个新闻源（RSS/Atom/JSON）。',
+          params: {
+            name: { type:'string', description:'源名字', required:true },
+            url: { type:'string', description:'源 URL', required:true },
+            category: { type:'string', description:'分类', required:false },
+            type: { type:'string', description:'rss 或 json', required:false },
+            proxy: { type:'boolean', description:'是否需要代理', required:false }
+          },
+          run: function(args){
+            if (!args || !args.name || !args.url) throw new Error('name 和 url 必填');
+            var src = {
+              id: 's_' + now().toString(36),
+              name: args.name, url: args.url,
+              cat: args.category || '未分类',
+              type: args.type || 'rss',
+              enabled: true,
+              proxy: !!args.proxy
+            };
+            STATE.sources.push(src);
+            Store.set('sources', STATE.sources);
+            renderSources();
+            return { ok: true, id: src.id, name: src.name };
+          }
+        },
+        markRead: {
+          description: '标记一条新闻为已读或未读。',
+          params: {
+            id: { type:'string', description:'新闻 id', required:true },
+            read: { type:'boolean', description:'true 已读，false 未读', required:false }
+          },
+          run: function(args){
+            if (!args || !args.id) throw new Error('id 必填');
+            STATE.read[args.id] = args.read !== false;
+            saveRead();
+            renderNewsList();
+            return { ok: true, id: args.id, read: STATE.read[args.id] };
+          }
+        }
+      }
+    });
+  } catch(e){}
+}
+
+function bindEvents(){
+  $('btnRefresh').onclick = refreshAll;
+  $('btnSettings').onclick = openSettings;
+  $('btnDigest').onclick = showDigest;
+  $('btnAddSource').onclick = openAddSource;
+  $('btnMenu').onclick = toggleSidebar;
+  $('btnCloseSettings').onclick = function(){ $('settingsMask').classList.remove('show'); };
+  $('btnSaveSettings').onclick = saveSettings;
+  $('btnCloseSource').onclick = function(){ $('sourceMask').classList.remove('show'); };
+  $('btnSaveSource').onclick = saveSource;
+  $('btnCloseDigest').onclick = function(){ $('digestMask').classList.remove('show'); };
+  $('btnGenDigest').onclick = showDigest;
+  $('searchInput').oninput = function(e){ STATE.search = e.target.value.trim(); renderNewsList(); };
+  $('sortSelect').onchange = function(e){ STATE.sort = e.target.value; renderNewsList(); };
+  document.querySelectorAll('.source-item[data-filter]').forEach(function(el0){
+    el0.onclick = function(){ STATE.filter = { type: el0.dataset.filter, value:'' }; renderAll(); closeMobileDrawer(); };
+  });
+  ['aiSummary','aiTags','aiDedupe'].forEach(function(id){
+    var cb = $(id);
+    cb.checked = !!STATE.settings[id];
+    cb.onchange = function(){ STATE.settings[id] = cb.checked; Store.set('settings', STATE.settings); };
+  });
+  ['settingsMask','sourceMask','digestMask'].forEach(function(id){
+    $(id).onclick = function(e){ if (e.target === $(id)) $(id).classList.remove('show'); };
+  });
+}
+
+function boot(){
+  Store.get('settings', null).then(function(saved){
+    if (saved) Object.keys(saved).forEach(function(k){ STATE.settings[k] = saved[k]; });
+    return Store.get('sources', null);
+  }).then(function(savedSources){
+    if (savedSources && savedSources.length) STATE.sources = savedSources;
+    else { STATE.sources = BUILTIN_SOURCES.slice(); Store.set('sources', STATE.sources); }
+    return Store.get('read', {});
+  }).then(function(read){
+    STATE.read = read || {};
+    return Store.get('notes', {});
+  }).then(function(notes){
+    STATE.notes = notes || {};
+    return Store.get('ui', null);
+  }).then(function(ui){
+    if (ui) STATE.ui = ui;
+    applySidebar();
+    bindEvents();
+    renderAll();
+    registerActions();
+    return loadCache().then(function(fresh){
+      renderAll();
+      if (!fresh) {
+        fetchAllSources(false).then(function(){
+          return aiEnrichBatch(STATE.news.filter(function(it){ return !it.summary && !it.tags; }).slice(0, 45));
+        }).then(function(){ return aiDedupe(); })
+          .then(function(){ return saveCache(); })
+          .then(renderAll).catch(function(){ renderAll(); });
+      }
+    });
+  }).catch(function(e){
+    renderAll();
+    toast('启动出错：' + (e && e.message ? e.message : e));
+  });
+}
+
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+else boot();
+
+})();
+</script>
+</body>
+</html>
