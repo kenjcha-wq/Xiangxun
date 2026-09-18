@@ -276,7 +276,7 @@
         <div class="name">只看未读</div><div class="badge" id="cntUnread">0</div>
       </div>
       <div class="source-item" data-filter="noted">
-        <div class="name">Notebook</div><div class="badge" id="cntNoted">0</div>
+        <div class="name">📝 我的笔记</div><div class="badge" id="cntNoted">0</div>
       </div>
       <div class="source-item" data-filter="starred">
         <div class="name">⭐ 收藏</div><div class="badge" id="cntStarred">0</div>
@@ -545,6 +545,156 @@ var BUILTIN_SOURCES = [
   { id:'s_new7', name:'游研社', cat:'游戏', url:'https://www.yystv.cn/rss/feed', type:'rss', enabled:true, proxy:false },
   { id:'s_movie', name:'电影·时光网', cat:'电影', url:'http://127.0.0.1:8787/rss/movie', type:'rss', enabled:true, proxy:false }
 ];
+
+/* ── 正文总结 / 导出（Obsidian、象库）───────────────────────── */
+
+function xesc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// HTML → 纯文本（够用就行：先扔掉脚本样式，尽量只留正文容器，再剥标签、解实体）
+function htmlToText(html){
+  var s = String(html || '');
+  s = s.replace(/<script[\s\S]*?<\/script>/gi, ' ')
+       .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+       .replace(/<noscript[\s\S]*?<\/noscript>/gi, ' ')
+       .replace(/<!--[\s\S]*?-->/g, ' ');
+  var m = s.match(/<article[\s\S]*?<\/article>/i) || s.match(/<main[\s\S]*?<\/main>/i);
+  if (m && m[0].length > 400) s = m[0];
+  s = s.replace(/<(br|\/p|\/div|\/li|\/h[1-6]|\/tr)[^>]*>/gi, '\n').replace(/<[^>]+>/g, ' ');
+  s = s.replace(/&nbsp;/g,' ').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>')
+       .replace(/&quot;/g,'"').replace(/&#39;/g,"'");
+  return s.replace(/[ \t\u00a0]+/g,' ').replace(/\n{3,}/g,'\n\n').trim();
+}
+
+// 抓正文：有宿主就让宿主抓（手机浏览器被跨域挡着，抓不了）
+function articleText(it){
+  if (!it || !it.link) return Promise.reject(new Error('这条没有链接'));
+  if (HAS_HOST && XL.call) {
+    return XL.call('http.fetch', { url: it.link, method: 'GET' }).then(function(res){
+      if (res && res.ok === false) throw new Error('抓不到正文（HTTP ' + (res.status || '') + '）');
+      var html = (res && typeof res.text === 'string') ? res.text : (typeof res === 'string' ? res : '');
+      var txt = htmlToText(html);
+      if (txt.length < 80) throw new Error('正文太短，这个站点可能是动态渲染的');
+      return txt.slice(0, 6000);
+    });
+  }
+  if (STATE.settings.proxy) {
+    return fetch(STATE.settings.proxy + encodeURIComponent(it.link))
+      .then(function(r){ return r.text(); })
+      .then(function(h){
+        var t = htmlToText(h);
+        if (t.length < 80) throw new Error('正文太短');
+        return t.slice(0, 6000);
+      });
+  }
+  return Promise.reject(new Error('这台设备没接象览宿主，浏览器抓不了正文（跨域）。用电脑上的象览打开就能总结正文。'));
+}
+
+// 真·总结正文：抓正文 → 让 AI 只根据正文写摘要
+function summarizeBody(it){
+  var note = $('aiSumNote');
+  if (note) note.textContent = '正在抓正文并总结…（最多十几秒）';
+  return articleText(it).then(function(text){
+    var prompt = '下面是一篇新闻的正文（已去掉 HTML）。请用中文写 3-5 句摘要，'
+      + '要抓住**主要内容、关键数字和结论**，不要复述标题，不要编造正文里没有的信息。\n\n' + text;
+    return aiChat([{ role:'user', content: prompt }], false);
+  }).then(function(txt){
+    txt = String(txt || '').trim();
+    if (!txt) throw new Error('AI 没返回内容');
+    it.summary = txt;
+    if (it.summarySource !== 'body') it.summarySource = 'body';
+    saveCache();
+    renderNewsList();
+    openNews(it.id);
+    toast('正文摘要已生成');
+    return txt;
+  }).catch(function(e){
+    if (note) note.textContent = '总结失败：' + (e && e.message || e);
+    throw e;
+  });
+}
+
+// 一条新闻 → Markdown 笔记（标题/来源/时间/链接/AI 摘要/我的笔记）
+function mdFor(it){
+  var L = [];
+  L.push('# ' + (it.title || '(无标题)'));
+  L.push('');
+  L.push('- 来源：' + (it.source || '') + (it.cat ? '（' + it.cat + '）' : ''));
+  if (it.time) L.push('- 时间：' + new Date(it.time).toLocaleString());
+  if (it.link) L.push('- 链接：' + it.link);
+  if (it.summary) { L.push(''); L.push('## AI 摘要'); L.push(''); L.push(it.summary); }
+  var mine = STATE.notes[it.id];
+  if (mine) { L.push(''); L.push('## 我的笔记'); L.push(''); L.push(mine); }
+  L.push(''); L.push('---'); L.push('由象览Air · 象讯导出 ' + new Date().toLocaleString());
+  return L.join('\n');
+}
+
+function copyText(t){
+  return new Promise(function(res){
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(t).then(function(){ res(true); }, function(){ res(fallbackCopy(t)); });
+      return;
+    }
+    res(fallbackCopy(t));
+  });
+}
+function fallbackCopy(t){
+  try {
+    var ta = document.createElement('textarea');
+    ta.value = t;
+    ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    var ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    return ok;
+  } catch (e) { return false; }
+}
+
+function safeFileName(s){
+  return String(s || '新闻').replace(/[\\/:*?"<>|\r\n\t]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60) || '新闻';
+}
+
+// 存进 Obsidian：第一次让你选一次库（记住），之后直接写文件。
+// 没有宿主（手机浏览器）就退化成"复制 Markdown"。
+function saveToObsidian(it){
+  var md = mdFor(it);
+  var name = safeFileName(it.title) + '.md';
+  if (!(HAS_HOST && XL.call)) {
+    return copyText(md).then(function(){
+      toast('已复制 Markdown：在 Obsidian 里新建笔记粘上就行（手机只能这样）');
+    });
+  }
+  var root = '';
+  try { root = localStorage.getItem('xiangxun:obsidian') || ''; } catch (e) {}
+  var chain;
+  if (!root) {
+    chain = XL.call('fs.pickFolder', {}).then(function(r){
+      if (!r || !r.ok || !r.root) throw new Error('没选文件夹');
+      root = r.root;
+      try { localStorage.setItem('xiangxun:obsidian', root); } catch (e) {}
+    });
+  } else {
+    chain = XL.call('fs.setRoot', { path: root }).then(function(r){
+      if (r && r.error) throw new Error(r.error);
+    });
+  }
+  return chain.then(function(){
+    return XL.call('fs.writeFile', { path: name, text: md, overwrite: true });
+  }).then(function(r){
+    if (r && r.error) throw new Error(r.error);
+    toast('已存进 Obsidian：' + name);
+  }).catch(function(e){
+    return copyText(md).then(function(){
+      toast('存 Obsidian 没成（' + (e && e.message || e) + '），已复制 Markdown 备用');
+    });
+  });
+}
+
+// 给象库：复制 Markdown，那边「粘贴导入」直接粘
+function copyForXiangku(it){
+  return copyText(mdFor(it)).then(function(){
+    toast('已复制：打开「象库」→ 粘贴导入 → 粘上即可');
+  });
+}
 
 function hostFetch(url, opt){
   opt = opt || {};
@@ -1012,9 +1162,33 @@ function renderNewsList(){
     box.appendChild(el('div', 'empty', STATE.news.length ? '没有匹配的新闻' : '点「刷新」抓取新闻'));
     return;
   }
+
+  // 「我的笔记」不是把新闻列表过滤一下就算完 —— 那看着还是新闻。
+  // 这里单独渲染成**笔记列表**：你写的内容当主角（标题位），原文标题当副标题，点一下回原文接着写。
+  if (STATE.filter.type === 'noted') {
+    list.slice().sort(function(a, b){ return (b.time || 0) - (a.time || 0); }).forEach(function(it){
+      var n = (STATE.notes[it.id] || '').trim();
+      if (!n) return;
+      var item = el('div', 'news-item noted-item');
+      item.dataset.id = it.id;
+      item.appendChild(el('div', 'title', '📝 ' + n.slice(0, 120)));
+      var meta = el('div', 'meta');
+      meta.appendChild(el('span', '', it.source || ''));
+      meta.appendChild(el('span', '', fmtTime(it.time)));
+      if (STATE.stars[it.id]) meta.appendChild(el('span', 'notemark', '★'));
+      item.appendChild(meta);
+      item.appendChild(el('div', 'summary', '原文：' + (it.title || '')));
+      item.onclick = function(){ openNews(it.id); };     // 点开原文，在那儿接着改笔记
+      box.appendChild(item);
+    });
+    if (!box.children.length) box.appendChild(el('div', 'empty', '还没有笔记：在阅读区里写，停手就会自动存'));
+    return;
+  }
+
   list.forEach(function(it){
     var item = el('div', 'news-item' + (STATE.read[it.id] ? '' : ' unread') + (STATE.currentId === it.id ? ' active' : ''));
     item.dataset.id = it.id;
+    var myNote = (STATE.notes[it.id] || '').trim();
     var title = el('div', 'title', it.title);
     var meta = el('div', 'meta');
     meta.appendChild(el('span', '', it.source || ''));
@@ -1031,6 +1205,7 @@ function renderNewsList(){
     (it.cats || []).forEach(function(c){ tagRow.appendChild(el('span', 'tag cat', c)); });
     (it.tags || []).forEach(function(t){ tagRow.appendChild(el('span', 'tag', t)); });
     if (tagRow.childNodes.length) item.appendChild(tagRow);
+    if (myNote) item.appendChild(el('div', 'summary', '📝 ' + myNote.slice(0, 120)));   // 自己写的笔记直接显出来
     if (it.summary) item.appendChild(el('div', 'summary', it.summary));
     item.onclick = function(){ openNews(it.id); };
     box.appendChild(item);
@@ -1072,7 +1247,26 @@ function renderReader(it){
   btnClose.onclick = function(){ $('colRead').classList.remove('mobile-show'); };
   var btnStar = el('button', 'btn', STATE.stars[it.id] ? '★ 取消收藏' : '☆ 收藏');
   btnStar.onclick = function(){ STATE.stars[it.id] = !STATE.stars[it.id]; saveStars(); renderNewsList(); openNews(it.id); };
-  actions.appendChild(btnOpen); actions.appendChild(btnStar); actions.appendChild(btnRead); actions.appendChild(btnClose);
+  // 正文总结：不是拿标题猜，是抓正文再让 AI 总结
+  var btnSum = el('button', 'btn', '✨ 总结正文');
+  btnSum.onclick = function(){
+    if (btnSum.disabled) return;
+    btnSum.disabled = true; btnSum.textContent = '总结中…';
+    summarizeBody(it).catch(function(){}).then(function(){
+      btnSum.disabled = false; btnSum.textContent = '✨ 重新总结';
+    });
+  };
+  // 导出：Obsidian / 象库
+  var btnObs = el('button', 'btn', '存 Obsidian');
+  btnObs.onclick = function(){ saveToObsidian(it); };
+  var btnMd = el('button', 'btn', '复制 MD');
+  btnMd.onclick = function(){ copyForXiangku(it); };
+  actions.appendChild(btnOpen); actions.appendChild(btnStar); actions.appendChild(btnSum);
+  actions.appendChild(btnObs); actions.appendChild(btnMd); actions.appendChild(btnRead); actions.appendChild(btnClose);
+  var sumNote = el('div', '', '');
+  sumNote.id = 'aiSumNote';
+  sumNote.style.cssText = 'flex-basis:100%;font-size:12px;color:var(--sub);white-space:pre-wrap';
+  actions.appendChild(sumNote);
   head.appendChild(actions);
   reader.appendChild(head);
 
@@ -1448,7 +1642,15 @@ function bindEvents(){
   $('searchInput').oninput = function(e){ STATE.search = e.target.value.trim(); renderNewsList(); };
   $('sortSelect').onchange = function(e){ STATE.sort = e.target.value; renderNewsList(); };
   document.querySelectorAll('.source-item[data-filter]').forEach(function(el0){
-    el0.onclick = function(){ STATE.filter = { type: el0.dataset.filter, value:'' }; renderAll(); closeMobileDrawer(); };
+    el0.onclick = function(){
+      STATE.filter = { type: el0.dataset.filter, value:'' };
+      renderAll();
+      closeMobileDrawer();
+      // ⚠️ 手机上阅读区是全屏的：只关侧栏抽屉、不关阅读区的话，
+      // 点「我的笔记」看到的还是刚才那篇新闻页面（用户报的就是这个）。
+      var rd = $('colRead');
+      if (rd) rd.classList.remove('mobile-show');
+    };
   });
   ['aiSummary','aiTags','aiDedupe'].forEach(function(id){
     var cb = $(id);
