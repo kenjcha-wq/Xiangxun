@@ -179,8 +179,8 @@
   .theme-chip span{position:absolute;inset:auto 0 -16px 0;font-size:10px;color:var(--sub);text-align:center;white-space:nowrap}
   @media (max-width:820px){
     .reader-head{padding:10px 12px 4px}
-    .reader-actions{gap:8px}
-    .reader-actions .btn{flex:1;min-height:40px}
+    .reader-actions{gap:6px}
+    .reader-actions .btn{flex:1 1 22%;min-width:0;min-height:38px;padding:0 5px;font-size:12.5px;white-space:nowrap}
     .note-box textarea{min-height:120px}
   }
   .reader-body{padding:20px;overflow:auto;flex:1}
@@ -191,7 +191,10 @@
   }
   .reader-body .summary-box h4{margin:0 0 7px;font-size:12px;color:var(--accent);letter-spacing:.8px;font-weight:500}
   .reader-body iframe{width:100%;height:70vh;border:none;border-radius:var(--radius);background:#fff}
+  /* 手机上有 7 个按钮：以前 flex:1 硬挤一行，字被挤成竖排（用户说"有点丑"）。
+     现在按最小宽度自动换行，每行 3~4 个，字始终横着。 */
   .reader-actions{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+  .reader-actions .btn{flex:0 1 auto;white-space:nowrap;min-width:86px;justify-content:center}
   .placeholder{padding:60px 20px;text-align:center;color:var(--sub)}
 
   /* 笔记区 */
@@ -1520,7 +1523,7 @@ function registerActions(){
         today: {
           description: '获取今天的新闻（按主题聚合的摘要列表）。',
           params: { limit: { type:'number', description:'最多返回几条，默认 20', required:false } },
-          run: function(args){
+          run: async function(args){
             var limit = (args && args.limit) || 20;
             var list = STATE.news.slice(0, limit).map(function(it){
               return { title: it.title, source: it.source, time: it.time, cat: it.cat,
@@ -1538,7 +1541,7 @@ function registerActions(){
             since: { type:'number', description:'起始时间戳(ms)', required:false },
             limit: { type:'number', description:'最多返回几条', required:false }
           },
-          run: function(args){
+          run: async function(args){
             args = args || {};
             var list = STATE.news.slice();
             if (args.keyword) {
@@ -1562,7 +1565,7 @@ function registerActions(){
         digest: {
           description: '生成或读取今天的新闻简报。',
           params: {},
-          run: function(){
+          run: async function(){
             return generateDigest().then(function(text){ return { digest: text }; })
               .catch(function(e){ throw new Error('AI 没接上：' + (e.message||'')); });
           }
@@ -1576,7 +1579,7 @@ function registerActions(){
             type: { type:'string', description:'rss 或 json', required:false },
             proxy: { type:'boolean', description:'是否需要代理', required:false }
           },
-          run: function(args){
+          run: async function(args){
             if (!args || !args.name || !args.url) throw new Error('name 和 url 必填');
             var src = {
               id: 's_' + now().toString(36),
@@ -1598,7 +1601,7 @@ function registerActions(){
             id: { type:'string', description:'新闻 id', required:true },
             read: { type:'boolean', description:'true 已读，false 未读', required:false }
           },
-          run: function(args){
+          run: async function(args){
             if (!args || !args.id) throw new Error('id 必填');
             STATE.read[args.id] = args.read !== false;
             saveRead();
@@ -1704,6 +1707,116 @@ function boot(){
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
 else boot();
+
+/* ══════════════════════════════════════════════════════════════
+   象览能力桥（象讯）—— 让象览的 AI 能"读"象讯。**只读，不写。**
+   规矩和其它应用一致：整段包在 if 里（单独打开不注册任何全局）、run 全是 async、
+   失败 throw 中文、列表有条数上限 + truncated、默认不返回长正文。
+   ⚠️ 动作绑在"注册它的那个页面"上：象讯这个标签页关掉，动作就从宿主的工具表里消失。
+   ══════════════════════════════════════════════════════════════ */
+if (window.xianglan && typeof window.xianglan.register === 'function') {
+  var xlReady = function () {
+    if (!STATE || !STATE.news) throw new Error('象讯还没加载完，请稍后再试');
+  };
+  var xlTime = function (t) { try { return t ? new Date(t).toLocaleString() : ''; } catch (e) { return ''; } };
+  var xlHit = function (it, q) {
+    if (!q) return true;
+    q = String(q).toLowerCase();
+    return (it.title || '').toLowerCase().indexOf(q) >= 0
+        || (it.desc || '').toLowerCase().indexOf(q) >= 0
+        || (it.summary || '').toLowerCase().indexOf(q) >= 0
+        || ((STATE.notes[it.id] || '')).toLowerCase().indexOf(q) >= 0;
+  };
+
+  window.xianglan.register({
+    description: '象讯（Xiangxun）：新闻聚合阅读器。可以读它的现状、检索已抓到的新闻、读今日简报。**只读**，不会改任何东西。',
+    actions: {
+      get_overview: {
+        description: '读象讯的现状：新闻总条数、未读/收藏/有我自己笔记/有AI摘要的条数、有哪些分类与来源、最近一次抓取时间、今天有没有简报。不含正文。',
+        params: {},
+        run: async function () {
+          xlReady();
+          var cats = {}, srcs = {};
+          STATE.news.forEach(function (it) {
+            if (it.cat) cats[it.cat] = (cats[it.cat] || 0) + 1;
+            if (it.source) srcs[it.source] = (srcs[it.source] || 0) + 1;
+          });
+          var catKeys = Object.keys(cats), srcKeys = Object.keys(srcs);
+          return {
+            total: STATE.news.length,
+            unread: STATE.news.filter(function (it) { return !STATE.read[it.id]; }).length,
+            starred: STATE.news.filter(function (it) { return !!STATE.stars[it.id]; }).length,
+            noted: STATE.news.filter(function (it) { return (STATE.notes[it.id] || '').trim(); }).length,
+            withAISummary: STATE.news.filter(function (it) { return (it.summary || '').trim(); }).length,
+            lastFetch: xlTime(STATE.lastFetch),
+            hasDigest: !!(window.__xbDigest || '').trim(),
+            categories: catKeys.map(function (k) { return k + '(' + cats[k] + ')'; }),
+            sources: srcKeys.slice(0, 30).map(function (k) { return k + '(' + srcs[k] + ')'; }),
+            sourcesTruncated: srcKeys.length > 30
+          };
+        }
+      },
+
+      query_news: {
+        description: '检索象讯里的新闻。scope 取值：all=全部（默认）、unread=未读、starred=收藏、noted=有我自己笔记的。keyword 会匹配标题/简介/AI摘要/我的笔记。默认只回标题级信息；要正文片段需显式传 withContent:true（最多 20 条，每条 ≤500 字）。',
+        params: {
+          keyword:    { type: 'string',  description: '关键词，留空=全部' },
+          scope:      { type: 'string',  description: 'all=全部（默认）/ unread=未读 / starred=收藏 / noted=有笔记' },
+          category:   { type: 'string',  description: '按分类过滤，例如 科技、酒店、电影、商业；不填=全部' },
+          limit:      { type: 'number',  description: '返回条数，默认 20，上限 50' },
+          withContent:{ type: 'boolean', description: '默认 false 只给标题级信息；true 才带最多 500 字的简介或摘要' }
+        },
+        run: async function (a) {
+          xlReady();
+          a = a || {};
+          var scope = a.scope || 'all';
+          if (['all', 'unread', 'starred', 'noted'].indexOf(scope) < 0) {
+            throw new Error('scope 只能是 all / unread / starred / noted，收到：' + scope);
+          }
+          var limit = Math.max(1, Math.min(50, parseInt(a.limit, 10) || 20));
+          var list = STATE.news.filter(function (it) {
+            if (scope === 'unread' && STATE.read[it.id]) return false;
+            if (scope === 'starred' && !STATE.stars[it.id]) return false;
+            if (scope === 'noted' && !(STATE.notes[it.id] || '').trim()) return false;
+            if (a.category && it.cat !== a.category) return false;
+            return xlHit(it, a.keyword);
+          });
+          var cap = a.withContent ? Math.min(limit, 20) : limit;
+          var items = list.slice(0, cap).map(function (it) {
+            var o = {
+              id: it.id, title: it.title, source: it.source || '', category: it.cat || '',
+              time: xlTime(it.time), link: it.link || '', hasAISummary: !!(it.summary || '').trim()
+            };
+            if (it.tags && it.tags.length) o.tags = it.tags.slice(0, 5);
+            var my = (STATE.notes[it.id] || '').trim();
+            if (my) o.myNote = my.slice(0, 300);
+            if (a.withContent) {
+              var body = (it.summary || '').trim() || (it.desc || '').trim();
+              if (body) o.content = body.slice(0, 500);
+            }
+            return o;
+          });
+          return {
+            total: list.length, returned: items.length, truncated: list.length > items.length,
+            scope: scope, keyword: a.keyword || '', category: a.category || '',
+            withContent: !!a.withContent, items: items
+          };
+        }
+      },
+
+      get_digest: {
+        description: '读象讯今天那份「每日简报」（云端烤好的全文）。云端没配 AI key 或者今天还没生成，就会明确报错。',
+        params: {},
+        run: async function () {
+          xlReady();
+          var d = (window.__xbDigest || '').trim();
+          if (!d) throw new Error('今天还没有简报：云端要配 DEEPSEEK_API_KEY 才会有（或等下一次抓取）');
+          return { digest: d.slice(0, 3000), truncated: d.length > 3000 };
+        }
+      }
+    }
+  });
+}
 
 })();
 </script>
