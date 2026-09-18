@@ -329,27 +329,66 @@ async function makeDigest(items, prev) {
   let prev = null;
   try { prev = JSON.parse(fs.readFileSync(path.resolve('news.json'), 'utf8')); } catch (e) {}
   const all = [];
-  const results = await Promise.allSettled([
-    ...SOURCES.filter(s => s.enabled !== false).map(async s => {
+  // 每个任务都记住"是谁"，这样失败时能直接报出源名 ——
+  // 以前只写 "❌ fetch failed"，还得拿 ✅ 名单去和 sources.json 求差集反推是哪个源。
+  const tasks = [], taskNames = [];
+  SOURCES.filter(s => s.enabled !== false).forEach(s => {
+    taskNames.push(`${s.name}（${s.cat}）`);
+    tasks.push((async () => {
       const { text, status } = await get(s.url);
       if (status !== 200) throw new Error(`HTTP ${status}`);
       const items = parseFeed(text, s);
       if (!items.length) throw new Error('解析出 0 条');
       console.log(`✅ ${s.name}（${s.cat}）${items.length} 条`);
       return items;
-    }),
-    ...SCRAPE.map(async s => {
+    })());
+  });
+  SCRAPE.forEach(s => {
+    taskNames.push(`${s.name}（定制）`);
+    tasks.push((async () => {
       const items = await scrape(s, base);
       console.log(`✅ ${s.name}（定制）${items.length} 条`);
       return items;
-    })
-  ]);
-  results.forEach(r => {
+    })());
+  });
+  const results = await Promise.allSettled(tasks);
+  results.forEach((r, i) => {
     if (r.status === 'fulfilled') all.push(...r.value);
-    else console.log(`❌ ${r.reason && r.reason.message}`);
+    else console.log(`❌ ${taskNames[i]}：${(r.reason && r.reason.message) || r.reason}`);
   });
 
-  const items = mergeDedupe(all).slice(0, 400);   // 手机端够看，也压住体积
+  // 选条目：**先给每个源保底**，再按时间补满。
+  // 以前是 mergeDedupe(...).slice(0,400)：安静的源（比如数字尾巴，本轮抓到 40 条但都比较旧）
+  // 会被时间排序挤到 400 名之后，**整个源一条不剩**，而且日志里什么都不说。
+  const merged = mergeDedupe(all);
+  const bySrc = new Map();
+  for (const it of merged) {
+    const k = it.source || '未分类';
+    if (!bySrc.has(k)) bySrc.set(k, []);
+    bySrc.get(k).push(it);
+  }
+  const FLOOR = 3;                       // 每个源至少留这么多（源多也不会挤爆：19×3=57）
+  const picked = [];
+  for (const arr of bySrc.values()) picked.push(...arr.slice(0, FLOOR));
+  const restArr = [];
+  for (const arr of bySrc.values()) restArr.push(...arr.slice(FLOOR));
+  restArr.sort((a, b) => (b.time || 0) - (a.time || 0));
+  for (const it of restArr) { if (picked.length >= 400) break; picked.push(it); }
+  picked.sort((a, b) => (b.time || 0) - (a.time || 0));
+  const items = picked.slice(0, 400);    // 手机端够看，也压住体积
+
+  // 每个源最终进了几条 —— 谁被砍了一目了然
+  const finalCount = new Map();
+  for (const it of items) {
+    const k = it.source || '未分类';
+    finalCount.set(k, (finalCount.get(k) || 0) + 1);
+  }
+  const detail = [...finalCount.entries()].sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v}`).join('　');
+  console.log(`来源明细（${bySrc.size} 个源）：${detail}`);
+  const zero = [];
+  for (const [k, arr] of bySrc) if (!finalCount.get(k)) zero.push(`${k}（抓到 ${arr.length} 条）`);
+  if (zero.length) console.log(`⚠️ 抓到但一条都没进最终列表：${zero.join('、')}`);
+
   console.log(`\n合并去重后 ${items.length} 条，开始 AI 摘要…`);
   await enrich(items, prev);
 
