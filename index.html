@@ -634,7 +634,12 @@ function mdFor(it){
   L.push('- 来源：' + (it.source || '') + (it.cat ? '（' + it.cat + '）' : ''));
   if (it.time) L.push('- 时间：' + new Date(it.time).toLocaleString());
   if (it.link) L.push('- 链接：' + it.link);
+  // ⚠️ 没配云端 key 时条目只有 RSS 的原文简介、没有 AI 摘要 ——
+  // 以前这里只放 AI 摘要，结果导出的 MD 只剩标题+网址（用户报的就是这个）。
+  // 现在：有 AI 摘要用 AI 摘要，没有就用原文简介，至少让"内容"进得去。
   if (it.summary) { L.push(''); L.push('## AI 摘要'); L.push(''); L.push(it.summary); }
+  else if (it.desc) { L.push(''); L.push('## 原文简介'); L.push(''); L.push(it.desc); }
+  if (it.tags && it.tags.length) { L.push(''); L.push('标签：' + it.tags.join('、')); }
   var mine = STATE.notes[it.id];
   if (mine) { L.push(''); L.push('## 我的笔记'); L.push(''); L.push(mine); }
   L.push(''); L.push('---'); L.push('由象览Air · 象讯导出 ' + new Date().toLocaleString());
