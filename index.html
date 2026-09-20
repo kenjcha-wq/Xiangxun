@@ -1683,6 +1683,22 @@ function bindEvents(){
 function boot(){
   Store.get('settings', null).then(function(saved){
     if (saved) Object.keys(saved).forEach(function(k){ STATE.settings[k] = saved[k]; });
+    // ── 象元Go 系统统一配置：宿主注入时优先使用 ──
+    try {
+      var _xl = null;
+      if (window.XLCloud) _xl = JSON.parse(window.XLCloud);
+      if (!_xl && window.__elemCloudBase) _xl = { base: window.__elemCloudBase, key: window.__elemCloudKey, model: window.__elemCloudModel };
+      if (_xl) {
+        if (_xl.base) STATE.settings.aiBase = _xl.base;
+        if (_xl.key) STATE.settings.aiKey = _xl.key;
+        if (_xl.model) STATE.settings.aiModel = _xl.model;
+      }
+      if (window.XLSet) { var _xs = JSON.parse(window.XLSet);
+        if (_xs.apiBase) STATE.settings.aiBase = _xs.apiBase;
+        if (_xs.apiKey) STATE.settings.aiKey = _xs.apiKey;
+        if (_xs.apiModel) STATE.settings.aiModel = _xs.apiModel;
+      }
+    } catch(e){}
     return Store.get('sources', null);
   }).then(function(savedSources){
     if (savedSources && savedSources.length) STATE.sources = savedSources;
@@ -1745,6 +1761,11 @@ if (window.xianglan && typeof window.xianglan.register === 'function') {
 
   window.xianglan.register({
     description: '象讯（Xiangxun）：新闻聚合阅读器。可以读它的现状、检索已抓到的新闻、读今日简报。**只读**，不会改任何东西。',
+    settings: [
+      { key:'aiBase', label:'接口地址', type:'text', def:'https://api.deepseek.com/v1/chat/completions', hint:'留空则用系统统一配置' },
+      { key:'aiKey', label:'接口 Key', type:'secret', hint:'留空则用系统统一配置（只存宿主，不给 AI 看）' },
+      { key:'aiModel', label:'模型', type:'text', def:'gpt-4o-mini' }
+    ],
     actions: {
       get_overview: {
         description: '读象讯的现状：新闻总条数、未读/收藏/有我自己笔记/有AI摘要的条数、有哪些分类与来源、最近一次抓取时间、今天有没有简报。不含正文。',
